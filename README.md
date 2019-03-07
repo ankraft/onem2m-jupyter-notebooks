@@ -18,7 +18,7 @@ The notebooks have been tested with *Eclipse om2m*.
 - Start (see [IN-CSE startup](https://wiki.eclipse.org/OM2M/one/Starting#IN-CSE_startup)) an IN-CSE instance.
 
 ### Jupyter Notebooks
-Prerequisite: The notebooks use Python 3.
+Prerequisite: The notebooks use Python 3 and the [requests](http://python-requests.org) library.
 
 - Install Jupyter locally. See [Installing the Jupyter Notebook](https://jupyter.org/install) for further details
 - Start a local Jupyter Notebook server in the directory of this repository's copy (s.a.). See [Running the Notebook](https://jupyter.readthedocs.io/en/latest/running.html#running) for further details.

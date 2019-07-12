@@ -18,8 +18,17 @@ The notebooks have been tested with *Eclipse om2m*.
 - Start (see [IN-CSE startup](https://wiki.eclipse.org/OM2M/one/Starting#IN-CSE_startup)) an IN-CSE instance.
 
 ### Jupyter Notebooks
-Prerequisite: The notebooks use Python 3 and the [requests](http://python-requests.org) library.
+#### Prerequisite
+The notebooks use
 
+- Python 3.
+- The [requests](http://python-requests.org) library
+	- ```pip3 install requests```
+- The [ipywidgets](https://github.com/jupyter-widgets/ipywidgets) library
+	- ```pip3 install -U -q ipywidgets```
+	- After installing Jupyter: ```jupyter nbextension enable --py widgetsnbextension```
+
+#### Installation
 - Install Jupyter locally. See [Installing the Jupyter Notebook](https://jupyter.org/install) for further details
 - Start a local Jupyter Notebook server in the directory of this repository's copy (s.a.). See [Running the Notebook](https://jupyter.readthedocs.io/en/latest/running.html#running) for further details.
 - A web page should open. Here, you select notebook you like to run.
@@ -47,6 +56,8 @@ Please change the configuration in the file [init.py](init.py) according to your
 
 You can (almost) execute the notebooks in any order, but you should execute [onem2m-02-basic-resources.ipynb](onem2m-02-basic-resources.ipynb) to create the basic resource structure for the subsequent notesbooks.
 
+Each notebook has an *init* section. Please execute this section and fill in a username (or identifier) in the field that appears in that section. This "username" is only used to distinguish between different users of the CSE and to prevent oberlappings.
+
 You may always restart the om2m CSE to reset the resource structure, or run the [onem2m-99-cleanup.ipynb](onem2m-99-cleanup.ipynb) notebook to remove the structure from the CSE.
 
 - [onem2m-01-introduction.ipynb](onem2m-01-introduction.ipynb)  
@@ -70,7 +81,7 @@ What are &lt;FlexContainers> and how to use them?
 
 
 - [onem2m-99-cleanup.ipynb](onem2m-99-cleanup.ipynb)  
-The code in this notebook removes the resources created by the other notebooks. This should be the last notebook to run, but can be executed when necessary.
+The code in this notebook removes the resources created by the other notebooks. This should be the last notebook to run, but can be executed whenever necessary.
 
 
 

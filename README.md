@@ -4,9 +4,29 @@ This repository contains a number of [Jupyter Notebooks](https://jupyter.org) th
 
 ## Installation and Running
 
+
 ### oneM2M Notebooks
 
 - Download or clone this repository to a local directory.
+- Check the configuration 
+
+#### Configuration
+
+Please change the configuration in the file [config.py](config.py) according to your setup. Normally, it shouldn't be necessary to change this when using the vanilla configuration from the *Eclipse om2m* installation.
+
+- **url** : The URL of the CSE we want to connect to in the examples in the notebooks.
+- **originator** : Originator ID to access the CSE.
+- **notificationPort** : The port for Notification Server.
+- **notificationInterface** : The network interface the Notifcation Server binds to.
+- **notificationURLBase** : The base URL for the Notification Server
+- **logfile** : Optional filename for the log data base
+
+
+
+#### Notification Server
+- Start the Notification Server in the directory *./notificationServer*: 
+	- ```python3 notificationServer.py```
+
 
 ### oneM2M CSE
 The notebooks have been tested with *Eclipse om2m*.
@@ -27,6 +47,9 @@ The notebooks use
 - The [ipywidgets](https://github.com/jupyter-widgets/ipywidgets) library
 	- ```pip3 install -U -q ipywidgets```
 	- After installing Jupyter: ```jupyter nbextension enable --py widgetsnbextension```
+- The [tinyDB](https://tinydb.readthedocs.io/en/latest/) library
+	- ```pip3 install tinydb```
+
 
 #### Installation
 - Install Jupyter locally. See [Installing the Jupyter Notebook](https://jupyter.org/install) for further details
@@ -40,16 +63,8 @@ When you open a notebook in your web browser you might get an error message abou
 
 You must use this URL including the token, because this authenticates the connection to the local Jupiter Notebook server.
 
+
 ## Using the Notebooks
-
-### Configuration
-
-Please change the configuration in the file [init.py](init.py) according to your setup. Normally, it shouldn't be necessary to change this when using the vanilla configuration from the *Eclipse om2m* installation.
-
-- **url** : The URL of the CSE we want to connect to in the examples in the notebooks.
-- **originator** : Originator ID to access the CSE.
-- **notificationPort** : The port for Notification Server.
-
 
 ### Running the Examples
 

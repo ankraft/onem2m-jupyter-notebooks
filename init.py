@@ -1,17 +1,9 @@
-############################# Configuration ##############################
 
-url              = 'http://localhost:8080/in-name'     # The URL of the CSE we want to connect to
-originator       = 'admin:admin'                       # Originator ID to access the CSE
-notificationPort = 8000                                # Port that the Notification Server binds to
-
-
-########################## End of Configuration ##########################
-
-
-import requests, json
+import requests
+import datetime, json, re, time
 import IPython.display
 import ipywidgets as widgets
-import re
+from config import *
 
 # variable to distinguish users
 _uid = ''
@@ -79,6 +71,21 @@ def PUT(url, headers, body):
     printRequest(url)
     printResponse(requests.put(url, headers=headers, data=body))
 
+    
+# Notification Server Query
+# The following function queries the notification server
+
+def queryNotificationServer():
+    lastRunTS = time.time()
+    printmd('**Waiting for notifications**', c='green')
+    while True:
+        result = requests.get(nu() + '?ts=' + str(lastRunTS))
+        lastRunTS = time.time()
+        if result.text:
+            printmd('### Received Notification - ' + str(datetime.datetime.now()))
+            print(result.text)
+        time.sleep(1)
+
 
 # The following Exception class is used to show a dialog to the user and gracefully stops the execution
 # of the current cell.
@@ -106,6 +113,10 @@ def ae():
 def acp():
     _checkuid()
     return 'ACP_' + _uid
+
+def nu():
+    _checkuid()
+    return notificationURLBase + ':' + str(notificationPort) + '/' + _uid
 
 
 # The following code presents an input field for the user to enter a username during the initialization

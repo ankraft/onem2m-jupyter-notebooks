@@ -1,9 +1,10 @@
-
 import requests
 import datetime, json, re, time
 import IPython.display
 import ipywidgets as widgets
+from IPython.display import JSON
 from config import *
+
 
 # variable to distinguish users
 _uid = ''
@@ -18,8 +19,14 @@ def printmd(s, c=None):
 
     
 # Print the request
-def printRequest(url):
+def printRequest(url, headers, body=None):
     printmd('Sending request to **' + url + '**')
+    printmd('**Headers**')
+    for h in headers:
+        print(h + ':' + headers[h])
+    if body is not None:
+        printmd('\n**Body**\n')
+        print(json.dumps(json.loads(body), indent=2))
 
 # Tidy-print a response header.
 def printResponse(r):
@@ -30,7 +37,7 @@ def printResponse(r):
         print(h + ':' + r.headers[h])
     if r.text:
         printmd('\n**Body**\n')
-        print(r.text)
+        print(json.dumps(json.loads(r.text), indent=2))
     printmd('---')
 
 # Show a javascript dialog
@@ -55,20 +62,20 @@ def dialog(msg, title=''):
 # The following request methods hide a bit of the complexity of constructing the
 # requests and make them easier to read.
 
-def GET(url, headers):
-    printRequest(url)
+def RETRIEVE(url, headers):
+    printRequest(url, headers)
     printResponse(requests.get(url, headers=headers))
 
-def POST(url, headers, body):
-    printRequest(url)
+def CREATE(url, headers, body):
+    printRequest(url, headers, body)
     printResponse(requests.post(url, headers=headers, data=body))
 
 def DELETE(url, headers):
-    printRequest(url)
+    printRequest(url, headers)
     printResponse(requests.delete(url, headers=headers))
     
-def PUT(url, headers, body):
-    printRequest(url)
+def UPDATE(url, headers, body):
+    printRequest(url, headers, body)
     printResponse(requests.put(url, headers=headers, data=body))
 
     
@@ -102,17 +109,17 @@ class StopExecution(Exception):
 # If it is not set then stop the execution of the cell by raising an exception
 
 def _checkuid():
-    if len(_uid) < 1:
+    if doUID and len(_uid) < 1:
         dialog('Please provide a username in the field at the top of this notebook.', 'Execution Stopped')
         raise StopExecution('ERROR: PLEASE PROVIDE A USERNAME') # This stops the execution
 
 def ae():
     _checkuid()
-    return 'AE_' + _uid
+    return 'AE_' + _uid if doUID else 'AE'
 
 def acp():
     _checkuid()
-    return 'ACP_' + _uid
+    return 'ACP_' + _uid if doUID else 'ACP'
 
 def nu():
     _checkuid()
@@ -127,18 +134,20 @@ def on_value_change(change):
     _uid = change['new']
     _uid = re.sub(r'[^a-zA-Z0-9_]',r'', _uid) # remove non-printables, white spaces etc
 
-printmd('### Enter Username')
-printmd('Please enter a unique username or identifier that will be used in the requests in order to distinguish the various users of the CSE.', 'green')
-printmd('You may want to re-use a username from a previous oneM2M notebook lecture.')
+if doUID:
+    printmd('### Enter Username')
+    printmd('Please enter a unique username or identifier that will be used in the requests in order to distinguish the various users of the CSE.', 'green')
+    printmd('You may want to re-use a username from a previous oneM2M notebook lecture.')
 
-field = widgets.Text(
-    value='',
-    placeholder='username for the lecture',
-    description='Username:',
-    disabled=False
-)
-field.style.background_color='#ff0000'
-display(field)
-field.observe(on_value_change, names='value')
+    field = widgets.Text(
+        value='',
+        placeholder='username for the lecture',
+        description='Username:',
+        disabled=False
+    )
+    field.style.background_color='#ff0000'
+    display(field)
+    field.observe(on_value_change, names='value')
 
+printmd('**Configuration Ready**', c='green')
   

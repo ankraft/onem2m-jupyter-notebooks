@@ -1,7 +1,7 @@
 import requests
-import datetime, json, re, time
+import datetime, re, time
+from json import loads, dumps
 import IPython.display
-import ipywidgets as widgets
 from IPython.display import JSON
 from config import *
 
@@ -17,7 +17,12 @@ def printmd(s, c=None):
         cs = s
     IPython.display.display(IPython.display.Markdown(cs))
 
-    
+
+# Format and print JSON
+def printJSON(j):
+    print(dumps(loads(j), indent=2))
+
+
 # Print the request
 def printRequest(url, headers, body=None):
     printmd('Sending request to **' + url + '**')
@@ -26,7 +31,11 @@ def printRequest(url, headers, body=None):
         print(h + ':' + headers[h])
     if body is not None:
         printmd('\n**Body**\n')
-        print(json.dumps(json.loads(body), indent=2))
+        if isinstance(body, str):
+            print(dumps(loads(body), indent=2))
+        elif isinstance(body, dict):
+            print(dumps(body, indent=2))
+
 
 # Tidy-print a response header.
 def printResponse(r):
@@ -37,26 +46,8 @@ def printResponse(r):
         print(h + ':' + r.headers[h])
     if r.text:
         printmd('\n**Body**\n')
-        print(json.dumps(json.loads(r.text), indent=2))
+        printJSON(r.text)
     printmd('---')
-
-# Show a javascript dialog
-def dialog(msg, title=''):
-    jsreq = '''
-    require(
-        ["base/js/dialog"], 
-        function(dialog) {
-            dialog.modal({
-                title: '%s',
-                body: '%s',
-                buttons: {
-                    'Dismiss': {  }
-                }
-            });
-        }
-    );
-    ''' % (title, msg)
-    IPython.display.display(IPython.display.Javascript(jsreq))
     
 
 # The following request methods hide a bit of the complexity of constructing the
@@ -68,7 +59,7 @@ def RETRIEVE(url, headers):
 
 def CREATE(url, headers, body):
     printRequest(url, headers, body)
-    printResponse(requests.post(url, headers=headers, data=body))
+    printResponse(requests.post(url, headers=headers, data=body if isinstance(body, str) else dumps(body)))
 
 def DELETE(url, headers):
     printRequest(url, headers)
@@ -76,7 +67,7 @@ def DELETE(url, headers):
     
 def UPDATE(url, headers, body):
     printRequest(url, headers, body)
-    printResponse(requests.put(url, headers=headers, data=body))
+    printResponse(requests.put(url, headers=headers, data=body if isinstance(body, str) else dumps(body)))
 
     
 # Notification Server Query
@@ -105,49 +96,16 @@ class StopExecution(Exception):
     def _render_traceback_(self):# Prevent printing of stacktrace 
         pass
 
-# Retrieve the value of the _uid variable and create identifiers for ae, acp etc
-# If it is not set then stop the execution of the cell by raising an exception
-
-def _checkuid():
-    if doUID and len(_uid) < 1:
-        dialog('Please provide a username in the field at the top of this notebook.', 'Execution Stopped')
-        raise StopExecution('ERROR: PLEASE PROVIDE A USERNAME') # This stops the execution
 
 def ae():
-    _checkuid()
-    return 'AE_' + _uid if doUID else 'AE'
+    return 'Notebook-AE'
 
 def acp():
-    _checkuid()
-    return 'ACP_' + _uid if doUID else 'ACP'
+    return 'Notebook-ACP'
 
 def nu():
-    _checkuid()
-    return notificationURLBase + ':' + str(notificationPort) + '/' + _uid
+    return notificationURLBase + ':' + str(notificationPort)
 
-
-# The following code presents an input field for the user to enter a username during the initialization
-# This username is later used in all requests to distinguis various users on the CSE
-
-def on_value_change(change):
-    global _uid
-    _uid = change['new']
-    _uid = re.sub(r'[^a-zA-Z0-9_]',r'', _uid) # remove non-printables, white spaces etc
-
-if doUID:
-    printmd('### Enter Username')
-    printmd('Please enter a unique username or identifier that will be used in the requests in order to distinguish the various users of the CSE.', 'green')
-    printmd('You may want to re-use a username from a previous oneM2M notebook lecture.')
-
-    field = widgets.Text(
-        value='',
-        placeholder='username for the lecture',
-        description='Username:',
-        disabled=False
-    )
-    field.style.background_color='#ff0000'
-    display(field)
-    field.observe(on_value_change, names='value')
 
 printmd('**Configuration Ready**', c='green')
   

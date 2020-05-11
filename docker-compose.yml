@@ -1,0 +1,12 @@
+version: "3"
+services:
+  cse:
+    image: ankraft/acme-onem2m-cse
+    hostname: cse
+    ports:
+      - "8080:8080"
+  notebooks:
+    image: ankraft/onem2m-notebooks
+    hostname: notebooks
+    ports:
+      - "8888:8888"

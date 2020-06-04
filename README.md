@@ -29,13 +29,7 @@ You may provide your own notification server, though.
 
 
 ### oneM2M CSE
-The notebooks have been tested with *Eclipse om2m*.
-
-- Install [Eclipse om2m](https://www.eclipse.org/om2m/). A Java 1.7 (or later) runtime is a requirement.
-- Configure (see [Server (IN-CSE) configuration](https://wiki.eclipse.org/OM2M/one/Starting#Server_.28IN-CSE.29_configuration)).
-- Remember the *IN-CSE HTTP listening port* and the *IN-CSE ip address*, because we need these values when configuring the notebooks later.
-- You also should set the configuration setting `org.eclipse.om2m.dbReset` to *true* in order to get a clean CSE environment when you restart the CSE.
-- Start (see [IN-CSE startup](https://wiki.eclipse.org/OM2M/one/Starting#IN-CSE_startup)) an IN-CSE instance.
+The notebooks have been tested with the [ACME oneM2M CSE](https://github.com/ankraft/ACME-oneM2M-CSE).
 
 ### Jupyter Notebooks
 #### Prerequisite
@@ -103,9 +97,11 @@ This section explains how to generate a Docker container for the notebooks and r
 
 ### Building a Docker Container
 
-There is already a [Dockerfile](Dockerfile) in the distribution to build a new Docker container. After starting your Docker instance, just run the command:
+There is already a [Dockerfile](tools/Docker/Dockerfile) in the distribution to build a new Docker container. After starting your Docker instance, just run the command:
 
 	docker build -t notebook .
+
+or use the provided shell script in the same directory.
 
 ### Running the Docker Container
 
@@ -126,12 +122,19 @@ You might also just download a pre-provisioned version of the notebooks from [ht
 
 	docker run -p 8888:8888 --rm --name onem2m-notebooks ankraft/onem2m-notebooks
 
+or use the provided shell script in the same directory.
 
 ### Running with Docker Compose
 To run the the notebooks together with the ACME CSE:
 
-- In a terminal shell in the same directory as the *docker-compose.yml* file resides, run the command ```docker-compose up -d```
-- To shutdown the notebooks and the CSE,  run the command ```docker-compose down``` 
+- In a terminal shell in the same directory as the *docker-compose.yml* file resides, run the command
+
+		docker-compose up -d
+
+- To shutdown the notebooks and the CSE,  run the command
+
+		docker-compose down
+
 
 ## License
 These Notebooks are available under the BSD 3-Clause License.

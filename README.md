@@ -126,6 +126,13 @@ You might also just download a pre-provisioned version of the notebooks from [ht
 
 	docker run -p 8888:8888 --rm --name onem2m-notebooks ankraft/onem2m-notebooks
 
+
+### Running with Docker Compose
+To run the the notebooks together with the ACME CSE:
+
+- In a terminal shell in the same directory as the *docker-compose.yml* file resides, run the command ```docker-compose up -d```
+- To shutdown the notebooks and the CSE,  run the command ```docker-compose down``` 
+
 ## License
 These Notebooks are available under the BSD 3-Clause License.
 

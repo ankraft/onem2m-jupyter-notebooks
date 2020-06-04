@@ -3,11 +3,13 @@ import datetime, re, time
 from json import loads, dumps
 import IPython.display
 from IPython.display import JSON
+
 from config import *
 
 
 # variable to distinguish users
 _uid = ''
+
 
 # Print and format as Markdown
 def printmd(s, c=None):
@@ -23,27 +25,36 @@ def printJSON(j):
     print(dumps(loads(j), indent=2))
 
 
+# Format the headers as a table
+def printHeaders(headers):
+    printmd('\n**Headers**')
+    table = '''| Header Field | Value |
+        |:---|:---|
+        '''
+    for h in headers:
+        table += '| %s | %s |\n' % (h, headers[h])
+    printmd(table)
+
+
+def printStatusCode(statusCode, reason):
+    printmd(str(statusCode) + ' (' + reason + ')', 'green' if 200 <= statusCode < 300 else 'red')
+
+
 # Print the request
 def printRequest(url, headers, body=None):
     printmd('Sending request to **' + url + '**')
-    printmd('**Headers**')
-    for h in headers:
-        print(h + ':' + headers[h])
+    printHeaders(headers)
     if body is not None:
         printmd('\n**Body**\n')
-        if isinstance(body, str):
-            print(dumps(loads(body), indent=2))
-        elif isinstance(body, dict):
-            print(dumps(body, indent=2))
+        (isinstance(body, str)  and print(dumps(loads(body), indent=2)))
+        (isinstance(body, dict) and print(dumps(body, indent=2)))
 
 
 # Tidy-print a response header.
 def printResponse(r):
     printmd('---\n### Response')
-    print(str(r.status_code) + ' (' + r.reason + ')')
-    printmd('\n**Headers**')
-    for h in r.headers:
-        print(h + ':' + r.headers[h])
+    printStatusCode(r.status_code, r.reason)
+    printHeaders(r.headers)
     if r.text:
         printmd('\n**Body**\n')
         printJSON(r.text)

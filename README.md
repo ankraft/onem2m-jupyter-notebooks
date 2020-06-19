@@ -1,9 +1,13 @@
 # oneM2M Jupyter Notebooks
 This repository contains a number of [Jupyter Notebooks](https://jupyter.org) that give a practical introduction to programmatically interacting with a [oneM2M](http://www.onem2m.org) CSE. The notebooks explain how to access a  CSE, add and update resources, and more.
 
+- [Installation and Running](#installation)  
+- [Docker](#docker)  
+- [Using the Notebooks](#using)  
 
+
+<a name="installation"></a>
 ## Installation and Running
-
 
 ### oneM2M Notebooks
 
@@ -65,6 +69,45 @@ If you enabled the authentication token (which is the default) then you must use
 
 If you run the Jupyter Notebook server without authentication token (see the *--NotebookApp.token* option above), just use, for example ``http://localhost:8888`` .
 
+<a name="docker"></a>
+## Docker
+This section explains how to generate a Docker container for the notebooks and running it.
+
+### Building a Docker Container
+
+There is already a [Dockerfile](Dockerfile) in the distribution to build a new Docker container. After starting your Docker instance, just run the command:
+
+	docker build -t notebook .
+
+### Running the Docker Container
+
+To run the built container use the following command:
+
+	docker run -p 8888:8888 --rm --name notebook notebook
+
+The container will still be running attached to your terminal. To detach it, add the *-d* option. 
+
+The *--rm* option removes the notebook container from your Docker instance after termination. This is useful because it removes all output and changes you might have done to the notebooks during a session.
+
+Please note that the notebooks might not launch in your browser automatically, but you can access the Notebooks via your browser at [http://localhost:8888](http://localhost:8888).
+
+
+### Downloading & Running from DockerHub
+
+You might also just download a pre-provisioned version of the notebooks from [https://hub.docker.com](https://hub.docker.com):
+
+	docker run -p 8888:8888 --rm --name onem2m-notebooks ankraft/onem2m-notebooks
+
+### Running a Complete Istallation with Docker Compose
+To run the the notebooks together with a pre-configured [ACME CSE](https://github.com/ankraft/ACME-oneM2M-CSE):
+
+- In a terminal shell in the same directory as the *docker-compose.yml* file resides, run the command ```docker-compose up -d```
+- Open the following URLs in a web browser
+	- The notebooks: [http://localhost:8888](http://localhost:8888)
+	- The CSE's web UI : [http://localhost:8080](http://localhost:8080)
+- To shutdown the notebooks and the CSE,  run the command ```docker-compose down``` 
+
+<a name="using"></a>
 ## Using the Notebooks
 
 ### Running the Examples
@@ -97,42 +140,7 @@ What are &lt;FlexContainers> and how to use them?
 - [onem2m-99-cleanup.ipynb](onem2m-99-cleanup.ipynb)  
 The code in this notebook removes the resources created by the other notebooks. This should be the last notebook to run, but can be executed whenever necessary.
 
-
-## Docker
-This section explains how to generate a Docker container for the notebooks and running it.
-
-### Building a Docker Container
-
-There is already a [Dockerfile](Dockerfile) in the distribution to build a new Docker container. After starting your Docker instance, just run the command:
-
-	docker build -t notebook .
-
-### Running the Docker Container
-
-To run the built container use the following command:
-
-	docker run -p 8888:8888 --rm --name notebook notebook
-
-The container will still be running attached to your terminal. To detach it, add the *-d* option. 
-
-The *--rm* option removes the notebook container from your Docker instance after termination. This is useful because it removes all output and changes you might have done to the notebooks during a session.
-
-Please note that the notebooks might not launch in your browser automatically, but you can access the Notebooks via your browser at [http://localhost:8888](http://localhost:8888).
-
-
-### Downloading & Running from DockerHub
-
-You might also just download a pre-provisioned version of the notebooks from [https://hub.docker.com](https://hub.docker.com):
-
-	docker run -p 8888:8888 --rm --name onem2m-notebooks ankraft/onem2m-notebooks
-
-
-### Running with Docker Compose
-To run the the notebooks together with the ACME CSE:
-
-- In a terminal shell in the same directory as the *docker-compose.yml* file resides, run the command ```docker-compose up -d```
-- To shutdown the notebooks and the CSE,  run the command ```docker-compose down``` 
-
 ## License
+
 These Notebooks are available under the BSD 3-Clause License.
 

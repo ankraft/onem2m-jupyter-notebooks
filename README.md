@@ -101,7 +101,7 @@ You might also just download a pre-provisioned version of the notebooks from [ht
 ### Running a Complete Istallation with Docker Compose
 To run the the notebooks together with a pre-configured [ACME CSE](https://github.com/ankraft/ACME-oneM2M-CSE):
 
-- In a terminal shell in the same directory as the *docker-compose.yml* file resides, run the command ```docker-compose up -d```
+- In a terminal shell in the [same directory](tools/Docker) as the [docker-compose.yml](tools/Docker/docker-compose.yml) file resides, run the command ```docker-compose up -d```
 - Open the following URLs in a web browser
 	- The notebooks: [http://localhost:8888](http://localhost:8888)
 	- The CSE's web UI : [http://localhost:8080](http://localhost:8080)

@@ -8,5 +8,5 @@ setup(
     author_email='an.kraft@gmail.com',
     description='A couple of Jupyter notebooks to explain how to create, access and manage oneM2M resources',
     packages=find_packages(),
-	install_requires=['flask', 'psutil',  'requests', 'tinydb' ]
+	install_requires=['flask', 'psutil',  'requests', 'rich', 'tinydb' ]
 )

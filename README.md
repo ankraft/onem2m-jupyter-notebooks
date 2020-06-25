@@ -112,6 +112,13 @@ Each notebook has an *init* section. Please execute this section before executin
 
 You may always restart the om2m CSE to reset the resource structure, or run the [onem2m-99-cleanup.ipynb](onem2m-99-cleanup.ipynb) notebook to remove the structure from the CSE.
 
+#### CSE & Notification Server Notebooks
+- [start-cse.ipynb](start-cse.ipynb)  
+This notebook runs a local CSE inside the a notebook. It is required for all the examples in the notebooks.
+- [start-notificationServer.ipynb](start-notificationServer.ipynb)  
+Notebook for receiving notifications. This must be run before using [onem2m-06-notifications-server.ipynb](onem2m-06-notifications-server.ipynb).
+
+#### oneM2M Notebooks
 - [onem2m-01-introduction.ipynb](onem2m-01-introduction.ipynb)  
 An introduction that demonstrates how to retrieve the root &lt;CSEBase> resource.
 - [onem2m-02-basic-resources.ipynb](onem2m-02-basic-resources.ipynb)  
@@ -122,9 +129,7 @@ How do you search for resources in a CSE?
 Group resources together and send requests to a group instead of each single resource.
 - [onem2m-05-accesscontrol.ipynb](onem2m-05-accesscontrol.ipynb)  
 Control access to resources with Access Control Policies.
-- [onem2m-06-notifications-server.ipynb](onem2m-06-notifications-server.ipynb)  
-Start a Notification Server that is required by the [onem2m-06a-notifications.ipynb](onem2m-06a-notifications.ipynb) notebook for receiving notifications.
-- [onem2m-06a-notifications.ipynb](onem2m-06a-notifications.ipynb)  
+- [onem2m-06-notifications.ipynb](onem2m-06a-notifications.ipynb)  
 Subscribe to changes of resources and receive notifications.
 - [onem2m-07-flexcontainer.ipynb](onem2m-07-flexcontainer.ipynb)  
 What are &lt;FlexContainers> and how to use them?

@@ -3,7 +3,11 @@ This repository contains a number of [Jupyter Notebooks](https://jupyter.org) th
 
 - [Installation and Running](#installation)  
 - [Docker](#docker)  
+- [Binder](#binder)  
 - [Using the Notebooks](#using)  
+
+
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/ankraft/onem2m-jupyter-notebooks/development)
 
 
 <a name="installation"></a>
@@ -27,7 +31,7 @@ Please change the configuration in the file [config.py](config.py) according to 
 
 
 #### Notification Server
-The Notification server is a separate notebook [onem2m-06-notifications-server.ipynb](onem2m-06-notifications-server.ipynb) that implements a simple notification server.
+The Notification server is a separate notebook [start-notificationServer.ipynb](start-notificationServer.ipynb) that implements a simple notification server. The executable script can be found here: [tools/NotificationServer/NotificationServer.py](tools/NotificationServer/NotificationServer.py) .
 
 You may provide your own notification server, though.
 
@@ -100,6 +104,11 @@ To run the the notebooks together with a pre-configured [ACME CSE](https://githu
 	- The notebooks: [http://localhost:8888](http://localhost:8888)
 	- The CSE's web UI : [http://localhost:8080](http://localhost:8080)
 - To shutdown the notebooks and the CSE,  run the command ```docker-compose down``` 
+
+<a name="binder"></a>
+## Binder
+The oneM2M notebooks can be run online with binder: [https://mybinder.org/v2/gh/ankraft/onem2m-jupyter-notebooks/development](https://mybinder.org/v2/gh/ankraft/onem2m-jupyter-notebooks/development)
+
 
 <a name="using"></a>
 ## Using the Notebooks

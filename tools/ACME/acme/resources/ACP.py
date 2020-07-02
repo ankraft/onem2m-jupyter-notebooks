@@ -7,6 +7,7 @@
 #	ResourceType: AccessControlPolicy
 #
 
+from typing import Tuple, List
 from Constants import Constants as C
 from Validator import constructPolicy
 from .Resource import *
@@ -21,7 +22,7 @@ attributePolicies = constructPolicy([
 
 class ACP(Resource):
 
-	def __init__(self, jsn=None, pi=None, rn=None, create=False, createdInternally=None):
+	def __init__(self, jsn: dict = None, pi: str = None, rn: str = None, create: bool = False, createdInternally: str = None) -> None:
 		super().__init__(C.tsACP, jsn, pi, C.tACP, create=create, inheritACP=True, rn=rn, attributePolicies=attributePolicies)
 		
 		if self.json is not None:
@@ -32,13 +33,13 @@ class ACP(Resource):
 
 
 	# Enable check for allowed sub-resources
-	def canHaveChild(self, resource):
+	def canHaveChild(self, resource: Resource) -> bool:
 		return super()._canHaveChild(resource,	
 									 [ C.tSUB # TODO Transaction to be added
 									 ])
 
 
-	def validate(self, originator, create=False):
+	def validate(self, originator: str = None, create: bool = False) -> Tuple[bool, int, str]:
 		if (res := super().validate(originator, create))[0] == False:
 			return res
 
@@ -47,13 +48,13 @@ class ACP(Resource):
 			cseOriginator = Configuration.get('cse.originator')
 			self.addPermissionOriginator(cseOriginator)
 			self.addSelfPermissionOriginator(cseOriginator)
-		return True, C.rcOK
+		return True, C.rcOK, None
 
 
 
 	#########################################################################
 
-	def createdInternally(self):
+	def createdInternally(self) -> str:
 		""" Return the resource.ri for which this ACP was created, or None. """
 		return self[self._createdInternally]
 
@@ -63,36 +64,37 @@ class ACP(Resource):
 	#	Permission handlings
 	#
 
-	def addPermission(self, originators : list, permission : int):
+	def addPermission(self, originators: list, permission: int) -> None:
 		o = list(set(originators))	# Remove duplicates from list of originators
 		if (p := self['pv/acr']) is not None:
 			p.append({'acop' : permission, 'acor': o})
 
-	def removePermissionForOriginator(self, originator : str):
+
+	def removePermissionForOriginator(self, originator: str) -> None:
 		if (p := self['pv/acr']) is not None:
 			for acr in p:
 				if originator in acr['acor']:
 					p.remove(acr)
 					
 
-	def addSelfPermission(self, originators : list, permission : int):
+	def addSelfPermission(self, originators: List[str], permission: int) -> None:
 		o = list(set(originators))	 # Remove duplicates from list of originators
 		if (p := self['pvs/acr']) is not None:
 			p.append({'acop' : permission, 'acor': o})
 
 
-	def addPermissionOriginator(self, originator):
+	def addPermissionOriginator(self, originator: str) -> None:
 		for p in self['pv/acr']:
 			if originator not in p['acor']:
 				p['acor'].append(originator)
 
-	def addSelfPermissionOriginator(self, originator):
+	def addSelfPermissionOriginator(self, originator: str) -> None:
 		for p in self['pvs/acr']:
 			if originator not in p['acor']:
 				p['acor'].append(originator)
 
 
-	def checkPermission(self, origin, requestedPermission):
+	def checkPermission(self, origin: str, requestedPermission: int) -> bool:
 		for p in self['pv/acr']:
 			if requestedPermission & p['acop'] == 0:	# permission not fitting at all
 				continue
@@ -101,7 +103,7 @@ class ACP(Resource):
 		return False
 
 
-	def checkSelfPermission(self, origin, requestedPermission):
+	def checkSelfPermission(self, origin: str, requestedPermission: int) -> bool:
 		for p in self['pvs/acr']:
 			if requestedPermission & p['acop'] == 0:	# permission not fitting at all
 				continue

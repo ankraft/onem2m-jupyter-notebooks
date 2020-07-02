@@ -23,7 +23,7 @@ attributePolicies = constructPolicy([
 
 class NOD(Resource):
 
-	def __init__(self, jsn=None, pi=None, create=False):
+	def __init__(self, jsn: dict = None, pi: str = None, create: bool = False) -> None:
 		super().__init__(C.tsNOD, jsn, pi, C.tNOD, create=create, attributePolicies=attributePolicies)
 
 		if self.json is not None:
@@ -31,7 +31,7 @@ class NOD(Resource):
 
 
 	# Enable check for allowed sub-resources
-	def canHaveChild(self, resource):
+	def canHaveChild(self, resource : Resource) -> bool:
 		return super()._canHaveChild(resource, 
 									[ C.tMGMTOBJ,
 									  C.tSUB

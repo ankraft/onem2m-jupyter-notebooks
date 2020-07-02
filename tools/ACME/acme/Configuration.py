@@ -8,20 +8,21 @@
 #
 
 
-import logging, configparser, re
+import logging, configparser, re, argparse
+from typing import Any, Dict
 from Constants import Constants as C
 
 
 defaultConfigFile			= 'acme.ini'
 defaultImportDirectory		= './init'
-version						= '0.4.0'
+version						= '0.5.0-dev'
 
 
 class Configuration(object):
-	_configuration				= {}
+	_configuration: Dict[str, Any] = {}
 
 	@staticmethod
-	def init(args = None):
+	def init(args: argparse.Namespace = None) -> bool:
 		global _configuration
 
 		import Utils	# cannot import at the top because of circel import
@@ -34,6 +35,7 @@ class Configuration(object):
 		argsImportDirectory		= args.importdirectory if args is not None and 'importdirectory' in args else None
 		argsAppsEnabled			= args.appsenabled if args is not None and 'appsenabled' in args else None
 		argsRemoteCSEEnabled	= args.remotecseenabled if args is not None and 'remotecseenabled' in args else None
+		argsValidationEnabled	= args.validationenabled if args is not None and 'validationenabled' in args else None
 
 
 		config = configparser.ConfigParser(	interpolation=configparser.ExtendedInterpolation(),
@@ -91,6 +93,7 @@ class Configuration(object):
 				'cse.enableNotifications'			: config.getboolean('cse', 'enableNotifications', 		fallback=True),
 				'cse.enableRemoteCSE'				: config.getboolean('cse', 'enableRemoteCSE', 			fallback=True),
 				'cse.enableTransitRequests'			: config.getboolean('cse', 'enableTransitRequests',		fallback=True),
+				'cse.enableValidation'				: config.getboolean('cse', 'enableValidation', 			fallback=True),
 				'cse.sortDiscoveredResources'		: config.getboolean('cse', 'sortDiscoveredResources',	fallback=True),
 				'cse.checkExpirationsInterval'		: config.getint('cse', 'checkExpirationsInterval',		fallback=60),		# Seconds
 
@@ -116,8 +119,8 @@ class Configuration(object):
 				#	Registrations
 				#
 
-				'cse.registration.allowedAEOriginators'	: config.getlist('cse.registration', 'allowedAEOriginators',	fallback=['C*','S*']),
-				'cse.registration.allowedCSROriginators': config.getlist('cse.registration', 'allowedCSROriginators',	fallback=[]),
+				'cse.registration.allowedAEOriginators'	: config.getlist('cse.registration', 'allowedAEOriginators',	fallback=['C*','S*']),		# type: ignore
+				'cse.registration.allowedCSROriginators': config.getlist('cse.registration', 'allowedCSROriginators',	fallback=[]),				# type: ignore
 
 
 				#
@@ -177,6 +180,7 @@ class Configuration(object):
 				'app.csenode.intervall'				: config.getint('app.csenode', 'updateIntervall', 		fallback=60),		# seconds
 
 			}
+
 		except Exception as e:	# about when findings errors in configuration
 			print('Error in configuration file: %s - %s' % (argsConfigfile, str(e)))
 			return False
@@ -212,7 +216,6 @@ class Configuration(object):
 		else:
 			Configuration._configuration['logging.level'] = logging.DEBUG
 
-
 		# Override DB reset from command line
 		if argsDBReset is True:
 			Configuration._configuration['db.resetAtStartup'] = True
@@ -232,6 +235,10 @@ class Configuration(object):
 		# Override remote CSE enablement
 		if argsRemoteCSEEnabled is not None:
 			Configuration._configuration['cse.enableRemoteCSE'] = argsRemoteCSEEnabled
+
+		# Override validation enablement
+		if argsValidationEnabled is not None:
+			Configuration._configuration['cse.enableValidation'] = argsValidationEnabled
 
 		# Correct urls
 		Configuration._configuration['cse.remote.address'] = Utils.normalizeURL(Configuration._configuration['cse.remote.address'])
@@ -257,13 +264,12 @@ class Configuration(object):
 			print('Configuration Error: Missing configuration [cse.remote]:resourceName')
 			return False
 
-
 		# Everything is fine
 		return True
 
 
 	@staticmethod
-	def print():
+	def print() -> str:
 		result = 'Configuration:\n'
 		for kv in Configuration._configuration.items():
 			result += '  %s = %s\n' % kv
@@ -271,22 +277,22 @@ class Configuration(object):
 
 
 	@staticmethod
-	def all():
+	def all() -> Dict[str, Any]:
 		return Configuration._configuration
 
 
 	@staticmethod
-	def get(key):
+	def get(key: str) -> Any:
 		if not Configuration.has(key):
 			return None
 		return Configuration._configuration[key]
 
 
 	@staticmethod
-	def set(key, value):
+	def set(key: str, value: Any) -> None:
 		Configuration._configuration[key] = value
 
 
 	@staticmethod
-	def has(key):
+	def has(key: str) -> bool:
 		return key in Configuration._configuration

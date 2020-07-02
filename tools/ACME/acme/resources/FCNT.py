@@ -8,6 +8,7 @@
 #
 
 import sys
+from typing import Tuple, List
 from Constants import Constants as C
 from Validator import constructPolicy
 import Utils
@@ -23,7 +24,7 @@ attributePolicies = constructPolicy([
 
 class FCNT(Resource):
 
-	def __init__(self, jsn=None, pi=None, fcntType=None, create=False):
+	def __init__(self, jsn: dict = None, pi: str = None, fcntType: str = None, create: bool = False) -> None:
 		super().__init__(fcntType, jsn, pi, C.tFCNT, create=create, attributePolicies=attributePolicies)
 		if self.json is not None:
 			self.setAttribute('cs', 0, overwrite=False)
@@ -38,58 +39,60 @@ class FCNT(Resource):
 
 
 	# Enable check for allowed sub-resources
-	def canHaveChild(self, resource):
+	def canHaveChild(self, resource: Resource) -> bool:
 		return super()._canHaveChild(resource,	
 									 [ C.tCNT,
 									   C.tFCNT,
 									   C.tSUB
+									   # FlexContainerInstances are added by the flexContainer itself
 									 ])
 
 
-	def activate(self, parentResource, originator):
-		super().activate(parentResource, originator)
-		# TODO Error checking above
+	def activate(self, parentResource: Resource, originator: str) -> Tuple[bool, int, str]:
+		if not (result := super().activate(parentResource, originator))[0]:
+			return result		# TODO Error checking above
 
 		# register latest and oldest virtual resources
 		Logging.logDebug('Registering latest and oldest virtual resources for: %s' % self.ri)
 
 		if self.hasInstances:
 			# add latest
-			r = Utils.resourceFromJSON({}, pi=self.ri, acpi=self.acpi, tpe=C.tFCNT_LA)
-			CSE.dispatcher.createResource(r)
+			r, _ = Utils.resourceFromJSON({}, pi=self.ri, acpi=self.acpi, ty=C.tFCNT_LA)
+			res = CSE.dispatcher.createResource(r)
+			if res[0] is None:
+				return False, res[1], res[2]
 
 			# add oldest
-			r = Utils.resourceFromJSON({}, pi=self.ri, acpi=self.acpi, tpe=C.tFCNT_OL)
-			CSE.dispatcher.createResource(r)
-		return True, C.rcOK
+			r, _ = Utils.resourceFromJSON({}, pi=self.ri, acpi=self.acpi, ty=C.tFCNT_OL)
+			res = CSE.dispatcher.createResource(r)
+			if res[0] is None:
+				return False, res[1], res[2]
+		return True, C.rcOK, None
 
 
-	def childWillBeAdded(self, childResource, originator):
-	
-		# See also CNT resource
-	
+	def childWillBeAdded(self, childResource: Resource, originator: str) -> Tuple[bool, int, str]:
 		if not (res := super().childWillBeAdded(childResource, originator))[0]:
 			return res
 
 		# Check whether the child's rn is "ol" or "la".
 		if (rn := childResource['rn']) is not None and rn in ['ol', 'la']:
-			return False, C.rcOperationNotAllowed
+			return False, C.rcOperationNotAllowed, 'resource types "latest" or "oldest" cannot be added'
 	
 		# Check whether the size of the CIN doesn't exceed the mbs
 		if childResource.ty == C.tCIN and self.mbs is not None:
 			if childResource.cs is not None and childResource.cs > self.mbs:
-				return False, C.rcNotAcceptable
-		return True, C.rcOK
+				return False, C.rcNotAcceptable,  'children content sizes would exceed mbs'
+		return True, C.rcOK, None
 
 
 	# Checking the presentse of cnd and calculating the size
-	def validate(self, originator, create=False):
+	def validate(self, originator: str = None, create: bool = False) -> Tuple[bool, int, str]:
 		if (res := super().validate(originator, create))[0] == False:
 			return res
 
 		# No CND?
 		if (cnd := self.cnd) is None or len(cnd) == 0:
-			return False, C.rcContentsUnacceptable
+			return False, C.rcContentsUnacceptable, 'cnd attribute missing or empty'
 
 		# Calculate contentSize
 		# This is not at all realistic since this is the in-memory representation
@@ -158,25 +161,25 @@ class FCNT(Resource):
 		# May have been changed, so store the resource 
 		x = CSE.dispatcher.updateResource(self, doUpdateCheck=False) # To avoid recursion, dont do an update check
 		
-		return True, C.rcOK
+		return True, C.rcOK, None
 
 
 	# Validate expirations of child resurces
-	def validateExpirations(self):
+	def validateExpirations(self) -> None:
 		Logging.logDebug('Validate expirations')
 		super().validateExpirations()
 
 		if (mia := self.mia) is None:
 			return
 		now = Utils.getResourceDate(-mia)
-		# print(now)		# fcis = self.flexContainerInstances()
+		# fcis = self.flexContainerInstances()
 		# TODO
 		# for fci in fcis
 
 
 
 	# Get all flexContainerInstances of a resource and return a sorted (by ct) list 
-	def flexContainerInstances(self):
+	def flexContainerInstances(self) -> List[Resource]:
 		return sorted(CSE.dispatcher.directChildResources(self.ri, C.tFCI), key=lambda x: (x.ct))
 
 # TODO:
@@ -187,7 +190,7 @@ class FCNT(Resource):
 # not exceed the maxInstanceAge of the targeted <flexContainer> resource.
 
 	# Add a new FlexContainerInstance for this flexContainer
-	def addFlexContainerInstance(self, originator):
+	def addFlexContainerInstance(self, originator: str) -> None:
 		Logging.logDebug('Adding flexContainerInstance')
 		jsn = {	'rn'  : '%s_%d' % (self.rn, self.st),
    				#'cnd' : self.cnd,
@@ -198,10 +201,10 @@ class FCNT(Resource):
 				jsn[attr] = self[attr]
 
 
-		fci = Utils.resourceFromJSON(jsn = { self.tpe : jsn },
-									pi = self.ri, 
-									acpi = self.acpi, # or no ACPI?
-									tpe = C.tFCI)
+		fci, _ = Utils.resourceFromJSON(jsn = { self.tpe : jsn },
+										pi = self.ri, 
+										acpi = self.acpi, # or no ACPI?
+										ty = C.tFCI)
 
 		CSE.dispatcher.createResource(fci)
 		fci['cs'] = self.cs

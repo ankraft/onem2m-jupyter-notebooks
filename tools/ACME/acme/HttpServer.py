@@ -8,14 +8,15 @@
 #	This manager is the main run-loop for the CSE (when using http).
 #
 
-import json, requests, logging, os, sys
+import json, requests, logging, os, sys, traceback
+from typing import Any, Callable, List, Tuple, Union
 import flask
-from flask import Flask, request, make_response
-from typing import Any, Callable
+from flask import Flask, Request, make_response, request
+from werkzeug.wrappers import Response
 from Configuration import Configuration, version
 from Constants import Constants as C
 import CSE, Utils
-from Logging import Logging, RedirectHandler
+from Logging import Logging
 from resources.Resource import Resource
 from werkzeug.serving import WSGIRequestHandler
 
@@ -23,7 +24,7 @@ from werkzeug.serving import WSGIRequestHandler
 
 class HttpServer(object):
 
-	def __init__(self):
+	def __init__(self) -> None:
 
 		# Initialize the http server
 		# Meaning defaults are automatically provided.
@@ -76,11 +77,7 @@ class HttpServer(object):
 
 
 
-	def run(self):
-		# Redirect the http server (Flask) log output to the CSE logs
-		#werkzeugLog = logging.getLogger('werkzeug')
-		#werkzeugLog.addHandler(RedirectHandler("httpServer"))
-
+	def run(self) -> None:
 		WSGIRequestHandler.protocol_version = "HTTP/1.1"
 
 
@@ -90,7 +87,7 @@ class HttpServer(object):
 		if self.flaskApp is not None:
 			# Disable the flask banner messages
 			cli = sys.modules['flask.cli']
-			cli.show_server_banner = lambda *x: None
+			cli.show_server_banner = lambda *x: None 	# type: ignore
 			# Start the server
 			try:
 				self.flaskApp.run(host=Configuration.get('http.listenIF'), 
@@ -99,57 +96,73 @@ class HttpServer(object):
 								  request_handler=ACMERequestHandler,
 								  debug=False)
 			except Exception as e:
-				Logging.logErr(e)
+				Logging.logErr(str(e))
 
 
 
-	def addEndpoint(self, endpoint=None, endpoint_name=None, handler=None, methods=None):
+	def addEndpoint(self, endpoint: str = None, endpoint_name: str = None, handler: Callable = None, methods: List[str] = None) -> None:
 		self.flaskApp.add_url_rule(endpoint, endpoint_name, handler, methods=methods)
 
 
-	def handleGET(self, path : str = None):
+	def handleGET(self, path: str = None) -> Response:
 		Logging.logDebug('==> Retrieve: /%s' % path) # path = request.path  w/o the root
 		Logging.logDebug('Headers: \n' + str(request.headers))
-		CSE.event.httpRetrieve()
-		resource, rc = CSE.dispatcher.retrieveRequest(request, Utils.retrieveIDFromPath(path, self.csern, self.cseri))
-		return self._prepareResponse(request, resource, rc)
+		CSE.event.httpRetrieve() # type: ignore
+		try:
+			resource, rc, msg = CSE.dispatcher.retrieveRequest(request, Utils.retrieveIDFromPath(path, self.csern, self.cseri))
+		except Exception as e:
+			resource, rc, msg = self._prepareException(e)
+		finally:
+			return self._prepareResponse(request, resource, rc, msg)
 
 
-	def handlePOST(self, path : str = None):
+	def handlePOST(self, path: str = None) -> Response:
 		Logging.logDebug('==> Create: /%s' % path)	# path = request.path  w/o the root
 		Logging.logDebug('Headers: \n' + str(request.headers))
 		Logging.logDebug('Body: \n' + request.data.decode("utf-8"))
-		CSE.event.httpCreate()
-		resource, rc = CSE.dispatcher.createRequest(request, Utils.retrieveIDFromPath(path, self.csern, self.cseri))
-		return self._prepareResponse(request, resource, rc)
+		CSE.event.httpCreate()	# type: ignore
+		try:
+			resource, rc, msg = CSE.dispatcher.createRequest(request, Utils.retrieveIDFromPath(path, self.csern, self.cseri))
+		except Exception as e:
+			resource, rc, msg = self._prepareException(e)
+		finally:
+			return self._prepareResponse(request, resource, rc, msg)
 
 
-	def handlePUT(self, path : str = None):
+	def handlePUT(self, path: str = None) -> Response:
 		Logging.logDebug('==> Update: /%s' % path)	# path = request.path  w/o the root
 		Logging.logDebug('Headers: \n' + str(request.headers))
 		Logging.logDebug('Body: \n' + request.data.decode("utf-8"))
-		CSE.event.httpUpdate()
-		resource, rc = CSE.dispatcher.updateRequest(request, Utils.retrieveIDFromPath(path, self.csern, self.cseri))
-		return self._prepareResponse(request, resource, rc)
+		CSE.event.httpUpdate()	# type: ignore
+		try:
+			resource, rc, msg = CSE.dispatcher.updateRequest(request, Utils.retrieveIDFromPath(path, self.csern, self.cseri))
+		except Exception as e:
+			resource, rc, msg = self._prepareException(e)
+		finally:
+			return self._prepareResponse(request, resource, rc, msg)
 
 
-	def handleDELETE(self, path : str = None):
+	def handleDELETE(self, path: str = None) -> Response:
 		Logging.logDebug('==> Delete: /%s' % path)	# path = request.path  w/o the root
 		Logging.logDebug('Headers: \n' + str(request.headers))
-		CSE.event.httpDelete()
-		resource, rc = CSE.dispatcher.deleteRequest(request, Utils.retrieveIDFromPath(path, self.csern, self.cseri))
-		return self._prepareResponse(request, resource, rc)
+		CSE.event.httpDelete()	# type: ignore
+		try:
+			resource, rc, msg = CSE.dispatcher.deleteRequest(request, Utils.retrieveIDFromPath(path, self.csern, self.cseri))
+		except Exception as e:
+			resource, rc, msg = self._prepareException(e)
+		finally:
+			return self._prepareResponse(request, resource, rc, msg)
 
 
 	#########################################################################
 
 
 	# Handle requests to mapped paths
-	def requestRedirect(self):
+	def requestRedirect(self) -> Union[Response, Tuple[str, int]]:
 		path = request.path[len(self.rootPath):] if request.path.startswith(self.rootPath) else request.path
 		if path in self.mappings:
 			Logging.logDebug('==> Redirecting to: /%s' % path)
-			CSE.event.httpRedirect()
+			CSE.event.httpRedirect()	# type: ignore
 			return flask.redirect(self.mappings[path], code=307)
 		return '', 404
 
@@ -161,13 +174,15 @@ class HttpServer(object):
 
 
 	# Redirect request to / to webui
-	def redirectRoot(self):
+	def redirectRoot(self) -> Response:
 		return flask.redirect(Configuration.get('cse.webui.root'), code=302)
+
 
 	def getVersion(self) -> str:
 		return version
 
-	def handleWebUIGET(self, path : str = None):
+
+	def handleWebUIGET(self, path: str = None) -> Union[Response, Any, Tuple[str, int]]:
 		""" Handle a GET request for the web GUI. """
 
 		# security check whether the path will under the web root
@@ -184,7 +199,7 @@ class HttpServer(object):
 			return flask.send_file(filename)
 		except Exception as e:
 			Logging.logWarn(str(e))
-			flask.abort(404)
+			return flask.abort(404)
 
 
 	#########################################################################
@@ -193,23 +208,23 @@ class HttpServer(object):
 	#	Send various types of HTTP requests
 	#
 
-	def sendRetrieveRequest(self, url : str, originator : str) -> (dict, int):
+	def sendRetrieveRequest(self, url: str, originator: str) -> Tuple[dict, int, str]:
 		return self.sendRequest(requests.get, url, originator)
 
 
-	def sendCreateRequest(self, url : str, originator : str, ty : int = None, data : Any = None) -> (dict, int):
+	def sendCreateRequest(self, url: str, originator: str, ty: int = None, data: Any = None) -> Tuple[dict, int, str]:
 		return self.sendRequest(requests.post, url, originator, ty, data)
 
 
-	def sendUpdateRequest(self, url : str, originator : str, data : Any) -> (dict, int):
+	def sendUpdateRequest(self, url: str, originator: str, data: Any) -> Tuple[dict, int, str]:
 		return self.sendRequest(requests.put, url, originator, data=data)
 
 
-	def sendDeleteRequest(self, url : str, originator : str) -> (dict, int):
+	def sendDeleteRequest(self, url: str, originator: str) -> Tuple[dict, int, str]:
 		return self.sendRequest(requests.delete, url, originator)
 
 
-	def sendRequest(self, method : Callable , url : str, originator : str, ty : int = None, data : Any = None, ct : str = 'application/json') -> (dict, int):	# TODO Constants
+	def sendRequest(self, method: Callable , url: str, originator: str, ty: int = None, data: Any = None, ct: str = 'application/json') -> Tuple[dict, int, str]:	# TODO Constants
 		headers = { 'Content-Type' 	: '%s%s' % (ct, ';ty=%d' % ty if ty is not None else ''), 
 					C.hfOrigin	 	: originator,
 					C.hfRI 			: Utils.uniqueRI(),
@@ -217,24 +232,35 @@ class HttpServer(object):
 				   }
 		try:
 			Logging.logDebug('Sending request: %s %s' % (method.__name__.upper(), url))
+			Logging.logDebug('<== Request:\n%s\n' % str(data))
 			r = method(url, data=data, headers=headers)
+			Logging.logDebug('==> Response (%s):\n%s' % (str(r.status_code), str(r.content.decode("utf-8"))))
 		except Exception as e:
 			Logging.logWarn('Failed to send request: %s' % str(e))
-			return None, C.rcTargetNotReachable
+			return None, C.rcTargetNotReachable, 'target not reachable'
 		rc = int(r.headers['X-M2M-RSC']) if 'X-M2M-RSC' in r.headers else C.rcInternalServerError
-		return r.json() if len(r.content) > 0 else None, rc
+		# Logging.logWarn(r.content)
+		return r.json() if len(r.content) > 0 else None, rc, None
 
 	#########################################################################
 
-	def _prepareResponse(self, request, resource, returnCode):
-		if resource is None:
+	def _prepareResponse(self, request: Request, resource: Union[Resource, dict, str], returnCode: int, errorMessage: str) -> Response:
+		if isinstance(resource, Resource):
+			r = json.dumps(resource.asJSON())
+		elif errorMessage is not None:
+			r = '{ "m2m:dbg" : "%s" }' % errorMessage
+		elif resource is None:
 			r = ''
 		elif isinstance(resource, dict):
 			r = json.dumps(resource)
+		elif isinstance(resource, str):
+			r = resource
 		else:
-			if (r := resource.asJSON() if isinstance(resource, Resource) else resource) is None:
-				r = ''
-				returnCode = C.rcNotFound
+			r = ''
+			returnCode = C.rcNotFound
+			# if (r := resource.asJSON() if isinstance(resource, Resource) else resource) is None:
+			# 	r = ''
+			# 	returnCode = C.rcNotFound
 		Logging.logDebug('<== Response (RSC: %d):\n%s\n' % (returnCode, str(r)))
 		resp = make_response(r)
 
@@ -248,6 +274,10 @@ class HttpServer(object):
 		resp.status_code = self._statusCode(returnCode)
 		resp.content_type = C.hfvContentType
 		return resp
+
+
+	def _prepareException(self, e: Exception) -> Tuple[None, int, str]:
+		return None, C.rcInternalServerError, 'encountered exception: %s' % traceback.format_exc().replace('"', '\\"').replace('\n', '\\n')
 
 
 	#
@@ -282,7 +312,7 @@ class HttpServer(object):
 	}
 
 
-	def _statusCode(self, sc):
+	def _statusCode(self, sc: int) -> int:
 		""" Map the oneM2M RSC to an http status code. """
 		return self._codes[sc]
 
@@ -295,15 +325,14 @@ class HttpServer(object):
 
 class ACMERequestHandler(WSGIRequestHandler):
 	# Just like WSGIRequestHandler, but without "- -"
-	def log(self, type, message, *args):
+	def log(self, type, message, *args): # type: ignore
 		return
 		# Logging.log('%s %s\n' % (self.address_string(),
 		# 								 message % args))
 
 	# Just like WSGIRequestHandler, but without "code"
-	def log_request(self, code='-', size='-'):
+	def log_request(self, code='-', size='-'): 	# type: ignore
 		Logging.logDebug('"%s" %s %d' % (self.requestline, size, code))
 
-	def log_message(self, format, *args):
+	def log_message(self, format, *args): 	# type: ignore
 		return
-

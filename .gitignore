@@ -1,3 +1,4 @@
 __pycache__/
 .ipynb_checkpoints/
 .python-version
+.mypy_cache/

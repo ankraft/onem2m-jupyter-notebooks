@@ -7,50 +7,47 @@
 #	ResourceType: fanOutPoint (virtual resource)
 #
 
-from typing import Tuple, Union
-from flask import Request
 from Constants import Constants as C
 import CSE
 from .Resource import *
 from Logging import Logging
-from Constants import Constants as C
+from Types import ResourceTypes as T, Result, Operation, CSERequest, JSON
 
 
-# TODO:
-# - Handle Group Request Target Members parameter
-# - Handle Group Request Identifier parameter
+# TODO - Handle Group Request Target Members parameter
+# TODO - Handle Group Request Identifier parameter
 
 # LIMIT
 # Only blockingRequest is supported
 
 class GRP_FOPT(Resource):
 
-	def __init__(self, jsn: dict = None, pi:str = None, create:bool = False) -> None:
-		super().__init__(C.tsGRP_FOPT, jsn, pi, C.tGRP_FOPT, create=create, inheritACP=True, readOnly=True, rn='fopt', isVirtual=True)
+	def __init__(self, dct:JSON=None, pi:str=None, create:bool=False) -> None:
+		super().__init__(T.GRP_FOPT, dct, pi, create=create, inheritACP=True, readOnly=True, rn='fopt', isVirtual=True)
 
 
 	# Enable check for allowed sub-resources
-	def canHaveChild(self, resource: Resource) -> bool:
+	def canHaveChild(self, resource:Resource) -> bool:
 		return super()._canHaveChild(resource, [])
 
 
-	def handleRetrieveRequest(self, request: Request, id: str, originator: str) -> Tuple[Union[Resource, dict], int, str]:
+	def handleRetrieveRequest(self, request:CSERequest=None, id:str=None, originator:str=None) -> Result:
 		Logging.logDebug('Retrieving resources from fopt')
-		return CSE.group.foptRequest(C.opRETRIEVE, self, request, id, originator)
+		return CSE.group.foptRequest(Operation.RETRIEVE, self, request, id, originator)	
 
 
-	def handleCreateRequest(self, request: Request, id: str, originator: str, ct: str, ty: int) -> Tuple[Union[Resource, dict], int, str]:
+	def handleCreateRequest(self, request:CSERequest, id:str, originator:str) -> Result:
 		Logging.logDebug('Creating resources at fopt')
-		return CSE.group.foptRequest(C.opCREATE, self, request, id, originator, ct, ty)
+		return CSE.group.foptRequest(Operation.CREATE, self, request, id, originator)
 
 
-	def handleUpdateRequest(self, request: Request, id: str, originator: str, ct: str) -> Tuple[Union[Resource, dict], int, str]:
+	def handleUpdateRequest(self, request:CSERequest, id:str, originator:str) -> Result:
 		Logging.logDebug('Updating resources at fopt')
-		return CSE.group.foptRequest(C.opUPDATE, self, request, id, originator, ct)
+		return CSE.group.foptRequest(Operation.UPDATE, self, request, id, originator)
 
 
-	def handleDeleteRequest(self, request: Request, id: str, originator: str) -> Tuple[Union[Resource, dict], int, str]:
+	def handleDeleteRequest(self, request:CSERequest, id:str, originator:str) -> Result:
 		Logging.logDebug('Deleting resources at fopt')
-		return CSE.group.foptRequest(C.opDELETE, self, request, id, originator)
+		return CSE.group.foptRequest(Operation.DELETE, self, request, id, originator)
 
 

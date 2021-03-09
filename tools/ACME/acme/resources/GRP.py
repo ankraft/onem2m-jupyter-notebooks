@@ -7,59 +7,68 @@
 #	ResourceType: Group
 #
 
-from typing import Tuple
 from Constants import Constants as C
-from Validator import constructPolicy
-import Utils
+from Types import ResourceTypes as T, Result, ConsistencyStrategy, JSON
+from Validator import constructPolicy, addPolicy
+from Logging import Logging
+import Utils, CSE
 from .Resource import *
+from .AnnounceableResource import AnnounceableResource
+import resources.Factory as Factory
+
 
 # Attribute policies for this resource are constructed during startup of the CSE
 attributePolicies = constructPolicy([ 
-	'ty', 'ri', 'rn', 'pi', 'acpi', 'ct', 'lt', 'et', 'lbl', 'at', 'aa', 'daci', 'cr',
+	'ty', 'ri', 'rn', 'pi', 'acpi', 'ct', 'lt', 'et', 'lbl', 'at', 'aa', 'daci', 'cr', 'hld', 
+])
+grpPolicies = constructPolicy([
 	'mt', 'spty', 'cnm', 'mnm', 'mid', 'macp', 'mtv', 'csy', 'gn', 'ssi', 'nar'
 ])
+attributePolicies = addPolicy(attributePolicies, grpPolicies)
 
-class GRP(Resource):
 
-	def __init__(self, jsn: dict = None, pi: str = None, fcntType: str = None, create: bool = False) -> None:
-		super().__init__(C.tsGRP, jsn, pi, C.tGRP, create=create, attributePolicies=attributePolicies)
-		if self.json is not None:
-			self.setAttribute('mt', C.tMIXED, overwrite=False)
+class GRP(AnnounceableResource):
+
+	def __init__(self, dct:JSON=None, pi:str=None, fcntType:str=None, create:bool=False) -> None:
+		super().__init__(T.GRP, dct, pi, create=create, attributePolicies=attributePolicies)
+
+		self.resourceAttributePolicies = grpPolicies	# only the resource type's own policies
+
+		if self.dict is not None:
+			self.setAttribute('mt', int(T.MIXED), overwrite=False)
 			self.setAttribute('ssi', False, overwrite=True)
 			self.setAttribute('cnm', 0, overwrite=False)	# calculated later
 			self.setAttribute('mid', [], overwrite=False)			
 			self.setAttribute('mtv', False, overwrite=False)
-			self.setAttribute('csy', C.csyAbandonMember, overwrite=False)
+			self.setAttribute('csy', ConsistencyStrategy.abandonMember, overwrite=False)
 
 			# These attributes are not provided by default: mnm (no default), macp (no default)
 			# optional set: spty, gn, nar
 
 
 	# Enable check for allowed sub-resources
-	def canHaveChild(self, resource: Resource) -> bool:
+	def canHaveChild(self, resource:Resource) -> bool:
 		return super()._canHaveChild(resource,	
-									 [ C.tSUB, 
-									   C.tGRP_FOPT
+									 [ T.SUB, 
+									   T.GRP_FOPT
 									 ])
 
-	def activate(self, parentResource: Resource, originator: str) -> Tuple[bool, int, str]:
-		if not (result := super().activate(parentResource, originator))[0]:
-			return result
-
+	def activate(self, parentResource:Resource, originator:str) -> Result:
+		if not (res := super().activate(parentResource, originator)).status:
+			return res
+		
 		# add fanOutPoint
 		ri = self['ri']
-		Logging.logDebug('Registering fanOutPoint resource for: %s' % ri)
-		fanOutPointResource, _ = Utils.resourceFromJSON({ 'pi' : ri }, acpi=self['acpi'], ty=C.tGRP_FOPT)
-		if not (res := CSE.dispatcher.createResource(fanOutPointResource, self, originator))[0]:
-			return False, res[1], res[2]
-		return True, C.rcOK, None
+		Logging.logDebug(f'Registering fanOutPoint resource for: {ri}')
+		fanOutPointResource = Factory.resourceFromDict({ 'pi' : ri }, ty=T.GRP_FOPT).resource
+		if (res := CSE.dispatcher.createResource(fanOutPointResource, self, originator)).resource is None:
+			return Result(status=False, rsc=res.rsc, dbg=res.dbg)
+		return Result(status=True)
 
 
-	def validate(self, originator: str = None, create: bool = False) -> Tuple[bool, int, str]:
-		if (res := super().validate(originator, create))[0] == False:
+	def validate(self, originator:str=None, create:bool=False, dct:JSON=None) -> Result:
+		if not (res := super().validate(originator, create, dct)).status:
 			return res
 		return CSE.group.validateGroup(self, originator)
-
-
 
 

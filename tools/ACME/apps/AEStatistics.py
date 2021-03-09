@@ -11,10 +11,12 @@
 from AEBase import *
 from Logging import Logging
 from Configuration import Configuration
-import Statistics, CSE
+import Statistics, CSE, Utils
 # The following line incorrectly throws an error with mypy
-from Types import BasicType as BT, Cardinality as CAR, RequestOptionality as RO, Announced as AN 	# type: ignore
+from Types import BasicType as BT, Cardinality as CAR, RequestOptionality as RO, Announced as AN
 import threading, time
+from Types import ResourceTypes as T
+
 
 
 class AEStatistics(AEBase):
@@ -36,50 +38,62 @@ class AEStatistics(AEBase):
 		# Attribute definitions for the statistics specialization
 		statisticAttributes =  {
 			self.fcntType : {
-				'rmRes'	: [ BT.nonNegInteger,	CAR.car01, 	RO.O,	RO.O,  AN.OA ],
-				'crRes'	: [ BT.nonNegInteger,	CAR.car01, 	RO.O,	RO.O,  AN.OA ],
-				'upRes'	: [ BT.nonNegInteger,	CAR.car01, 	RO.O,	RO.O,  AN.OA ],
-				'htRet'	: [ BT.nonNegInteger,	CAR.car01, 	RO.O,	RO.O,  AN.OA ],
-				'htCre'	: [ BT.nonNegInteger,	CAR.car01, 	RO.O,	RO.O,  AN.OA ],
-				'htUpd'	: [ BT.nonNegInteger,	CAR.car01, 	RO.O,	RO.O,  AN.OA ],
-				'htDel'	: [ BT.nonNegInteger,	CAR.car01, 	RO.O,	RO.O,  AN.OA ],
-				'cseSU'	: [ BT.timestamp,		CAR.car01, 	RO.O,	RO.O,  AN.OA ],
-				'lgErr'	: [ BT.nonNegInteger,	CAR.car01, 	RO.O,	RO.O,  AN.OA ],
-				'lgWrn'	: [ BT.nonNegInteger,	CAR.car01, 	RO.O,	RO.O,  AN.OA ],
-				'cseUT'	: [ BT.string,			CAR.car01, 	RO.O,	RO.O,  AN.OA ],
-				'ctRes'	: [ BT.nonNegInteger,	CAR.car01, 	RO.O,	RO.O,  AN.OA ]
+				'rmRes'	: ( BT.nonNegInteger,	CAR.car01, RO.O, RO.O, RO.O, AN.OA ),
+				'crRes'	: ( BT.nonNegInteger,	CAR.car01, RO.O, RO.O, RO.O, AN.OA ),
+				'upRes'	: ( BT.nonNegInteger,	CAR.car01, RO.O, RO.O, RO.O, AN.OA ),
+				'htRet'	: ( BT.nonNegInteger,	CAR.car01, RO.O, RO.O, RO.O, AN.OA ),
+				'htCre'	: ( BT.nonNegInteger,	CAR.car01, RO.O, RO.O, RO.O, AN.OA ),
+				'htUpd'	: ( BT.nonNegInteger,	CAR.car01, RO.O, RO.O, RO.O, AN.OA ),
+				'htDel'	: ( BT.nonNegInteger,	CAR.car01, RO.O, RO.O, RO.O, AN.OA ),
+				'htSRt'	: ( BT.nonNegInteger,	CAR.car01, RO.O, RO.O, RO.O, AN.OA ),
+				'htSCr'	: ( BT.nonNegInteger,	CAR.car01, RO.O, RO.O, RO.O, AN.OA ),
+				'htSUp'	: ( BT.nonNegInteger,	CAR.car01, RO.O, RO.O, RO.O, AN.OA ),
+				'htSDl'	: ( BT.nonNegInteger,	CAR.car01, RO.O, RO.O, RO.O, AN.OA ),
+				'cseSU'	: ( BT.timestamp,		CAR.car01, RO.O, RO.O, RO.O, AN.OA ),
+				'lgErr'	: ( BT.nonNegInteger,	CAR.car01, RO.O, RO.O, RO.O, AN.OA ),
+				'lgWrn'	: ( BT.nonNegInteger,	CAR.car01, RO.O, RO.O, RO.O, AN.OA ),
+				'cseUT'	: ( BT.string,			CAR.car01, RO.O, RO.O, RO.O, AN.OA ),
+				'ctRes'	: ( BT.nonNegInteger,	CAR.car01, RO.O, RO.O, RO.O, AN.OA ),
+				'exRes'	: ( BT.nonNegInteger,	CAR.car01, RO.O, RO.O, RO.O, AN.OA ),
+				'notif'	: ( BT.nonNegInteger,	CAR.car01, RO.O, RO.O, RO.O, AN.OA ),
 			}
 		}
 
 		# Add the definitions to the validator
-		CSE.validator.addAdditionalAttributes(statisticAttributes)
+		CSE.validator.updateAdditionalAttributes(statisticAttributes)
 
 
 		# Create structure beneath the AE resource
+		dct = { self.fcntType : {
+				'rn'  : Configuration.get('app.statistics.fcntRN'),
+					'cnd' : Configuration.get('app.statistics.fcntCND'),
+					'mni' : 2,
+					'aa' : ['rmRes', 'crRes', 'upRes', 'crRes', 'cseUT'],
+				Statistics.deletedResources : 0,
+				Statistics.createdResources : 0,
+				Statistics.updatedResources : 0,
+				Statistics.httpRetrieves : 0,
+				Statistics.httpCreates : 0,
+				Statistics.httpUpdates : 0,
+				Statistics.httpDeletes : 0,
+				Statistics.logErrors : 0,
+				Statistics.logWarnings : 0,
+				Statistics.cseStartUpTime : '',
+				Statistics.cseUpTime : '',
+				Statistics.resourceCount: 0
+			}
+		}
+		# add announceTarget if target CSI is given
+		if (rcsi:= Configuration.get('cse.registrar.csi')) is not None:
+			Utils.setXPath(dct, f'{self.fcntType}/at', [rcsi])
+		#Utils.setXPath(dct, f'{self.fcntType}/at', ['/id-in'])
+
 		self.fc = self.retrieveCreate(	srn=self.fcsrn,
-										jsn={ self.fcntType : {
-												'rn'  : Configuration.get('app.statistics.fcntRN'),
-       											'cnd' : Configuration.get('app.statistics.fcntCND'),
-       											'acpi': [ self.acpi ],	# assignde by CSE,
-       											'mni' : 10,
-												Statistics.deletedResources : 0,
-												Statistics.createdResources : 0,
-												Statistics.updatedResources : 0,
-												Statistics.httpRetrieves : 0,
-												Statistics.httpCreates : 0,
-												Statistics.httpUpdates : 0,
-												Statistics.httpDeletes : 0,
-												Statistics.logErrors : 0,
-												Statistics.logWarnings : 0,
-												Statistics.cseStartUpTime : '',
-												Statistics.cseUpTime : '',
-												Statistics.resourceCount: 0
-											}
-										},
-										ty=C.tFCNT)
+										data=dct,
+										ty=T.FCNT)
 
 		# Update the statistic resource from time to time
-		self.startWorker(Configuration.get('app.statistics.intervall'), self.statisticsWorker, 'statisticsWorker')
+		self.startWorker(Configuration.get('app.statistics.intervall'), self.statisticsWorker, 'statsAE')
 
 		Logging.log('AEStatistics AE registered')
 
@@ -97,8 +111,8 @@ class AEStatistics(AEBase):
 		Logging.logDebug('Updating statistics')
 
 		# Update statistics
-		stats = CSE.statistics.getStats()
-		self.updateResource(srn=self.fcsrn, jsn={ self.fcntType : stats })
+		if (stats := CSE.statistics.getStats()) is not None:
+			self.updateResource(srn=self.fcsrn, data={ self.fcntType : stats })
 
 		return True
 

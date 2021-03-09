@@ -1,8 +1,8 @@
 {	"m2m:cb" : {
-		"ri" : "${cse.ri}",
 		"ty" : 5,
+		"ri" : "${cse.ri}",
 		"rn" : "${cse.rn}",
 		"csi" : "${cse.csi}",
-		"acpi" : [ "${cse.security.adminACPI}", "${cse.security.csebaseAccessACPI}" ]
+		"csz" : [ "application/json", "application/cbor" ]
 	}
 }

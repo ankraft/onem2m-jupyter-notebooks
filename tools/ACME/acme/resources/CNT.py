@@ -7,105 +7,142 @@
 #	ResourceType: Container
 #
 
-from typing import Tuple, List
+from typing import List
 from Logging import Logging
 from Configuration import Configuration
 from Constants import Constants as C
-from Validator import constructPolicy
+from Types import ResourceTypes as T, Result, ResponseCode as RC, JSON
+from Validator import constructPolicy, addPolicy
 import Utils, CSE
 from .Resource import *
+from .AnnounceableResource import AnnounceableResource
+import resources.Factory as Factory
+
+
+
 
 # Attribute policies for this resource are constructed during startup of the CSE
 attributePolicies = constructPolicy([ 
-	'ty', 'ri', 'rn', 'pi', 'acpi', 'ct', 'lt', 'et', 'st', 'lbl', 'at', 'aa', 'daci', 'loc',
-	'cr', 
+	'ty', 'ri', 'rn', 'pi', 'acpi', 'ct', 'lt', 'et', 'st', 'lbl', 'at', 'aa', 'daci', 'loc', 'hld', 'cr',
+])
+cntPolicies = constructPolicy([
 	'mni', 'mbs', 'mia', 'cni', 'cbs', 'li', 'or', 'disr'
 ])
+attributePolicies =  addPolicy(attributePolicies, cntPolicies)
 
 
-class CNT(Resource):
+class CNT(AnnounceableResource):
 
 
-	def __init__(self, jsn: dict = None, pi: str = None, create: bool = False) -> None:
-		super().__init__(C.tsCNT, jsn, pi, C.tCNT, create=create, attributePolicies=attributePolicies)
+	def __init__(self, dct:JSON=None, pi:str=None, create:bool=False) -> None:
+		super().__init__(T.CNT, dct, pi, create=create, attributePolicies=attributePolicies)
 
-		if self.json is not None:
+		self.resourceAttributePolicies = cntPolicies	# only the resource type's own policies
+
+		if self.dict is not None:
 			self.setAttribute('mni', Configuration.get('cse.cnt.mni'), overwrite=False)
 			self.setAttribute('mbs', Configuration.get('cse.cnt.mbs'), overwrite=False)
 			self.setAttribute('cni', 0, overwrite=False)
 			self.setAttribute('cbs', 0, overwrite=False)
 
+		self.__validating = False	# semaphore for validating
+
 
 	# Enable check for allowed sub-resources
 	def canHaveChild(self, resource: Resource) -> bool:
 		return super()._canHaveChild(resource,	
-									 [ C.tCNT,
-									   C.tCIN,
-									   C.tFCNT,
-									   C.tSUB
+									 [ T.CNT,
+									   T.CIN,
+									   T.FCNT,
+									   T.SUB
 									 ])
 
 
-	def activate(self, parentResource: Resource, originator: str) -> Tuple[bool, int, str]:
-		if not (result := super().activate(parentResource, originator))[0]:
-			return result
+	def activate(self, parentResource:Resource, originator:str) -> Result:
+		if not (res := super().activate(parentResource, originator)).status:
+			return res
+		
 
 		# register latest and oldest virtual resources
-		Logging.logDebug('Registering latest and oldest virtual resources for: %s' % self.ri)
+		Logging.logDebug(f'Registering latest and oldest virtual resources for: {self.ri}')
 
 		# add latest
-		r, _ = Utils.resourceFromJSON({}, pi=self.ri, acpi=self.acpi, ty=C.tCNT_LA)
-		res = CSE.dispatcher.createResource(r)
-		if res[0] is None:
-			return False, res[1], res[2]
+		latestResource = Factory.resourceFromDict({}, pi=self.ri, ty=T.CNT_LA).resource		# rn is assigned by resource itself
+		if (res := CSE.dispatcher.createResource(latestResource)).resource is None:
+			return Result(status=False, rsc=res.rsc, dbg=res.dbg)
 
 		# add oldest
-		r, _ = Utils.resourceFromJSON({}, pi=self.ri, acpi=self.acpi, ty=C.tCNT_OL)
-		res = CSE.dispatcher.createResource(r)
-		if res[0] is None:
-			return False, res[1], res[2]
+		oldestResource = Factory.resourceFromDict({}, pi=self.ri, ty=T.CNT_OL).resource		# rn is assigned by resource itself
+		if (res := CSE.dispatcher.createResource(oldestResource)).resource is None:
+			return Result(status=False, rsc=res.rsc, dbg=res.dbg)
 
-		return True, C.rcOK, None
+		return Result(status=True)
 
 
 	# Get all content instances of a resource and return a sorted (by ct) list 
 	def contentInstances(self) -> List[Resource]:
-		return sorted(CSE.dispatcher.directChildResources(self.ri, C.tCIN), key=lambda x: (x.ct))
+		return sorted(CSE.dispatcher.directChildResources(self.ri, T.CIN), key=lambda x: (x.ct))	# type: ignore[no-any-return]
 
 
-	def childWillBeAdded(self, childResource: Resource, originator: str) -> Tuple[bool, int, str]:
-		if not (res := super().childWillBeAdded(childResource, originator))[0]:
+	def childWillBeAdded(self, childResource:Resource, originator:str) -> Result:
+		if not (res := super().childWillBeAdded(childResource, originator)).status:
 			return res
 		
 		# Check whether the child's rn is "ol" or "la".
 		if (rn := childResource['rn']) is not None and rn in ['ol', 'la']:
-			return False, C.rcOperationNotAllowed, 'resource types "latest" or "oldest" cannot be added'
+			return Result(status=False, rsc=RC.operationNotAllowed, dbg='resource types "latest" or "oldest" cannot be added')
 	
 		# Check whether the size of the CIN doesn't exceed the mbs
-		if childResource.ty == C.tCIN and self.mbs is not None:
+		if childResource.ty == T.CIN and self.mbs is not None:
 			if childResource.cs is not None and childResource.cs > self.mbs:
-				return False, C.rcNotAcceptable, 'children content sizes would exceed mbs'
-		return True, C.rcOK, None
+				return Result(status=False, rsc=RC.notAcceptable, dbg='children content sizes would exceed mbs')
+		return Result(status=True)
 
 
 	# Handle the addition of new CIN. Basically, get rid of old ones.
-	def childAdded(self, childResource: Resource, originator: str) -> None:
+	def childAdded(self, childResource:Resource, originator:str) -> None:
+		Logging.logDebug(f'Child resource added: {childResource.ri}')
 		super().childAdded(childResource, originator)
-		if childResource.ty == C.tCIN:	# Validate if child is CIN
+		if childResource.ty == T.CIN:	# Validate if child is CIN
+
+			# Check for mia handling
+			if self.mia is not None:
+				# Take either mia or the maxExpirationDelta, whatever is smaller
+				maxEt = Utils.getResourceDate(self.mia if self.mia <= (med := Configuration.get('cse.maxExpirationDelta')) else med)
+				# Only replace the childresource's et if it is greater than the calculated maxEt
+				if childResource.et > maxEt:
+					childResource.setAttribute('et', maxEt)
+					childResource.dbUpdate()
+
 			self.validate(originator)
 
 	# Handle the removal of a CIN. 
-	def childRemoved(self, childResource: Resource, originator: str) -> None:
+	def childRemoved(self, childResource:Resource, originator:str) -> None:
+		Logging.logDebug(f'Child resource removed: {childResource.ri}')
 		super().childRemoved(childResource, originator)
-		if childResource.ty == C.tCIN:	# Validate if child was CIN
-			self.validate(originator)
+		if childResource.ty == T.CIN:	# Validate if child was CIN
+			self._validateChildren()
 
 
 	# Validating the Container. This means recalculating cni, cbs as well as
 	# removing ContentInstances when the limits are met.
-	def validate(self, originator: str = None, create: bool = False) -> Tuple[bool, int, str]:
-		if (res := super().validate(originator, create))[0] == False:
+	def validate(self, originator:str=None, create:bool=False, dct:JSON=None) -> Result:
+		if (res := super().validate(originator, create, dct)).status == False:
 			return res
+		self._validateChildren()
+		return Result(status=True)
+
+
+	# TODO Align this and FCNT implementations
+	
+	def _validateChildren(self) -> None:
+		""" Internal validation and checks. This called more often then just from
+			the validate() method.
+		"""
+		# Check whether we already are in validation the children (ie prevent unfortunate recursion by the Dispatcher)
+		if self.__validating:
+			return
+		self.__validating = True
 
 		# retrieve all children
 		cs = self.contentInstances()
@@ -116,11 +153,11 @@ class CNT(Resource):
 		i = 0
 		l = cni
 		while cni > mni and i < l:
+			Logging.logDebug(f'cni > mni: Removing <cin>: {cs[i].ri}')
 			# remove oldest
-			CSE.dispatcher.deleteResource(cs[i])
-			cni -= 1
+			CSE.dispatcher.deleteResource(cs[i], parentResource=self)
+			cni -= 1	# decrement cni
 			i += 1
-		self['cni'] = cni
 
 		# check size
 		cs = self.contentInstances()	# get CINs again
@@ -131,16 +168,19 @@ class CNT(Resource):
 		i = 0
 		l = len(cs)
 		while cbs > mbs and i < l:
+			Logging.logDebug(f'cbs > mbs: Removing <cin>: {cs[i].ri}')
+
 			# remove oldest
 			cbs -= cs[i]['cs']
-			CSE.dispatcher.deleteResource(cs[i])
+			CSE.dispatcher.deleteResource(cs[i], parentResource=self)
+			cni -= 1	# again, decrement cni when deleting a cni
 			i += 1
-		self['cbs'] = cbs
-
-		# TODO: support maxInstanceAge
 
 		# Some CNT resource may have been updated, so store the resource 
-		CSE.dispatcher.updateResource(self, doUpdateCheck=False) # To avoid recursion, dont do an update check
-
-		return True, C.rcOK, None
+		self['cni'] = cni
+		self['cbs'] = cbs
+		self.dbUpdate()
+	
+		# End validating
+		self.__validating = False
 

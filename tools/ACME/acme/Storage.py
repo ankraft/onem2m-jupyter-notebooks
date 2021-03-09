@@ -9,21 +9,24 @@
 #	or just in memory.
 #
 
-from tinydb import TinyDB, Query, where 		# type: ignore
-from tinydb.storages import MemoryStorage		# type: ignore
-from tinydb.operations import delete 			# type: ignore
+from __future__ import annotations
+from tinydb import TinyDB, Query, where
+from tinydb.storages import MemoryStorage
+from tinydb.table import Document
+from tinydb.operations import delete 
 # TODO remove mypy type checking supressions above as soon as tinydb provides typing stubs
-# from tinydb_smartcache import SmartCacheTable # TODO Not compatible with TinyDB 4 yet
 
-import os, json, re
-from typing import Tuple, List, Callable, Any
+import os, json, re, time
+from typing import Callable, Any, cast
 from threading import Lock
 from Configuration import Configuration
 from Constants import Constants as C
+from Types import ResourceTypes as T, Result, ResponseCode as RC, ContentSerializationType, JSON
 from Logging import Logging
 from resources.Resource import Resource
+import resources.Factory as Factory
+from resources.AnnounceableResource import AnnounceableResource
 import CSE, Utils
-from helpers import BackgroundWorker
 
 
 class Storage(object):
@@ -41,30 +44,21 @@ class Storage(object):
 				Logging.logErr('db.path not set')
 				raise RuntimeError('db.path not set')
 
+		
 		self.db = TinyDBBinding(path)
-		self.db.openDB()
+		self.db.openDB(f'-{CSE.cseCsi[1:]}') # add CSE CSI as postfix
 
 		# Reset dbs?
-		if Configuration.get('db.resetAtStartup') is True:
+		if Configuration.get('db.resetOnStartup') is True:
 			self.db.purgeDB()
-
-		# Start background worker to handle expired resources
-		Logging.log('Starting expiration worker')
-		if (iv := Configuration.get('cse.checkExpirationsInterval')) > 0:
-			self.expirationWorker = BackgroundWorker.BackgroundWorker(iv, self.expirationDBWorker, 'expirationDBWorker')
-			self.expirationWorker.start()
 
 		Logging.log('Storage initialized')
 
 
-	def shutdown(self) -> None:
-		# Stop the expiration worker
-		Logging.log('Stopping expiration worker')
-		if self.expirationWorker is not None:
-			self.expirationWorker.stop()
-
+	def shutdown(self) -> bool:
 		self.db.closeDB()
 		Logging.log('Storage shut down')
+		return True
 
 
 	#########################################################################
@@ -73,166 +67,205 @@ class Storage(object):
 	##
 
 
-	def createResource(self, resource: Resource, overwrite: bool = True) -> Tuple[bool, int, str]:
+	def createResource(self, resource:Resource, overwrite:bool=True) -> Result:
 		if resource is None:
 			Logging.logErr('resource is None')
 			raise RuntimeError('resource is None')
 
 		ri = resource.ri
 
-		# Logging.logDebug('Adding resource (ty: %d, ri: %s, rn: %s)' % (resource['ty'], resource['ri'], resource['rn']))
-		did = None
+		# Logging.logDebug(f'Adding resource (ty: {resource.ty:d}, ri: {resource.ri}, rn: {resource.rn})'
 		srn = resource.__srn__
 		if overwrite:
 			Logging.logDebug('Resource enforced overwrite')
 			self.db.upsertResource(resource)
 		else: 
-			# if not self.db.hasResource(ri=ri) and not self.db.hasResource(srn=srn):	# Only when not resource does not exist yet
 			if not self.hasResource(ri, srn):	# Only when not resource does not exist yet
 				self.db.insertResource(resource)
 			else:
-				Logging.logWarn('Resource already exists (Skipping): %s ' % resource)
-				return False, C.rcAlreadyExists, 'resource already exists'
+				Logging.logWarn(f'Resource already exists (Skipping): {resource}')
+				return Result(status=False, rsc=RC.alreadyExists, dbg='resource already exists')
 
 		# Add path to identifiers db
 		self.db.insertIdentifier(resource, ri, srn)
-		return True, C.rcCreated, None
+		return Result(status=True, rsc=RC.created)
 
 
 	# Check whether a resource with either the ri or the srn already exists
-	def hasResource(self, ri: str, srn: str) -> bool:
-		return self.db.hasResource(ri=ri) or self.db.hasResource(srn=srn)
+	def hasResource(self, ri:str=None, srn:str=None) -> bool:
+		return (ri is not None and self.db.hasResource(ri=ri)) or (srn is not None and self.db.hasResource(srn=srn))
 
 
-	def retrieveResource(self, ri: str = None, csi: str = None, srn: str = None) -> Tuple[Resource, int, str]:
+	def retrieveResource(self, ri:str=None, csi:str=None, srn:str=None, aei:str=None) -> Result:
 		""" Return a resource via different addressing methods. """
 		resources = []
 
 		if ri is not None:		# get a resource by its ri
-			# Logging.logDebug('Retrieving resource ri: %s' % ri)
+			# Logging.logDebug(f'Retrieving resource ri: {ri}')
 			resources = self.db.searchResources(ri=ri)
 
 		elif srn is not None:	# get a resource by its structured rn
-			# Logging.logDebug('Retrieving resource srn: %s' % srn)
+			# Logging.logDebug(f'Retrieving resource srn: {srn}')
 			# get the ri via the srn from the identifers table
 			resources = self.db.searchResources(srn=srn)
 
 		elif csi is not None:	# get the CSE by its csi
-			# Logging.logDebug('Retrieving resource csi: %s' % csi)
+			# Logging.logDebug(f'Retrieving resource csi: {csi}')
 			resources = self.db.searchResources(csi=csi)
-
-		# return Utils.resourceFromJSON(resources[0]) if len(resources) == 1 else None,
-		if (l := len(resources)) == 1:
-			r, _ = Utils.resourceFromJSON(resources[0])
-			return r, C.rcOK, None
-		elif l == 0:
-			return None, C.rcNotFound, None
-	
-		return None, C.rcInternalServerError, 'database inconsistency'
-
-
-
-	def retrieveResourcesByType(self, ty: int) -> List[dict]:
-		""" Return all resources of a certain type. """
-		# Logging.logDebug('Retrieving all resources ty: %d' % ty)
-		return self.db.searchResources(ty=ty)
-
-
-
-
-	# def discoverResources(self, rootResource, handling, conditions, attributes, fo):
-	# 	# preparations
-	# 	rootSRN = rootResource.__srn__
-	# 	handling['__returned__'] = 0
-	# 	handling['__matched__'] = 0
-	# 	if 'lvl' in handling:
-	# 		handling['__lvl__'] = rootSRN.count('/') + handling['lvl']
-
-	# 	# a bit of optimization. This length stays the same.
-	# 	allLen = ((len(conditions) if conditions is not None else 0) +
-	# 	  (len(attributes) if attributes is not None else 0) +
-	# 	  (len(conditions['ty']) if conditions is not None else 0) - 1 +
-	# 	  (len(conditions['cty']) if conditions is not None else 0) - 1 
-	# 	 )
-
-	# 	rs = self.db.discoverResources(lambda r: _testDiscovery(self,
-	# 															r,
-	# 															rootSRN,
-	# 															handling,
-	# 															conditions,
-	# 															attributes,
-	# 															fo,
-	# 															handling['lim'] if 'lim' in handling else None,
-	# 															handling['ofst'] if 'ofst' in handling else None,
-	# 															allLen))
 		
-	# 	# transform JSONs to resources
-	# 	result = []
-	# 	for r in rs:
-	# 		result.append(Utils.resourceFromJSON(r))
+		elif aei is not None:	# get an AE by its AE-ID
+			resources = self.db.searchResources(aei=aei)
 
-	# 	# sort resources by type and then by lowercase rn
-	# 	if Configuration.get('cse.sortDiscoveredResources'):
-	# 		result.sort(key=lambda x:(x.ty, x.rn.lower()))
-	# 	return result
+		# Logging.logDebug(resources)
+		# return CSE.dispatcher.resourceFromDict(resources[0]) if len(resources) == 1 else None,
+		if (l := len(resources)) == 1:
+			return Factory.resourceFromDict(resources[0])
+		elif l == 0:
+			return Result(rsc=RC.notFound, dbg='resource not found')
+
+		return Result(rsc=RC.internalServerError, dbg='database inconsistency')
 
 
-	def updateResource(self, resource: Resource) -> Tuple[Resource, int, str]:
+	def retrieveResourcesByType(self, ty: T) -> list[Document]:
+		""" Return all resources of a certain type. """
+		# Logging.logDebug(f'Retrieving all resources ty: {ty:d}')
+		return self.db.searchResources(ty=int(ty))
+
+
+	def updateResource(self, resource: Resource) -> Result:
 		if resource is None:
 			Logging.logErr('resource is None')
 			raise RuntimeError('resource is None')
 		ri = resource.ri
-		# Logging.logDebug('Updating resource (ty: %d, ri: %s, rn: %s)' % (resource['ty'], ri, resource['rn']))
-		resource = self.db.updateResource(resource)
-		return resource, C.rcUpdated, None
+		# Logging.logDebug(f'Updating resource (ty: {resource.ty:d}, ri: {ri}, rn: {resource.rn})')
+		return Result(resource=self.db.updateResource(resource), rsc=RC.updated)
 
 
-	def deleteResource(self, resource: Resource) -> Tuple[bool, int, str]:
+	def deleteResource(self, resource: Resource) -> Result:
 		if resource is None:
 			Logging.logErr('resource is None')
 			raise RuntimeError('resource is None')
-		# Logging.logDebug('Removing resource (ty: %d, ri: %s, rn: %s)' % (resource['ty'], ri, resource['rn']))
+		# Logging.logDebug(f'Removing resource (ty: {resource.ty:d}, ri: {ri}, rn: {resource.rn})'
 		self.db.deleteResource(resource)
 		self.db.deleteIdentifier(resource)
-		return True, C.rcDeleted, None
+		return Result(status=True, rsc=RC.deleted)
 
 
 
-	def directChildResources(self, pi: str, ty: int = None) -> List[Resource]:
-		rs = self.db.searchResources(pi=pi, ty=ty)
-
-		# if ty is not None:
-		# 	rs = self.tabResources.search((Query().pi == pi) & (Query().ty == ty))
-		# else:
-		# 	rs = self.tabResources.search(Query().pi == pi)			
+	def directChildResources(self, pi:str, ty:T=None) -> list[Resource]:
+		"""	Return a list of direct child resources.
+		"""
+		rs = self.db.searchResources(pi=pi, ty=int(ty) if ty is not None else None)
 		result = []
 		for r in rs:
-			resource, _ = Utils.resourceFromJSON(r)
-			if resource is not None:
-				result.append(resource)
+			res = Factory.resourceFromDict(r)
+			if res.resource is not None:
+				result.append(res.resource)
 		return result
+
+
+	def countDirectChildResources(self, pi:str, ty:T = None) -> int:
+		"""	Count the direct child resources.
+		"""
+		return len(self.db.searchResources(pi=pi, ty=int(ty) if ty is not None else None))
 
 
 	def countResources(self) -> int:
 		return self.db.countResources()
 
 
-	def identifier(self, ri: str) -> List[dict]:
+	def identifier(self, ri:str) -> list[JSON] | list[Document]:
 		return self.db.searchIdentifiers(ri=ri)
 
-	def structuredPath(self, srn: str) -> List[dict]:
+	def structuredPath(self, srn:str) -> list[JSON] | list[Document]:
 		return self.db.searchIdentifiers(srn=srn)
 
 
-	def searchByTypeFieldValue(self, ty: int, field: str, value: str) -> List[Resource]:
+	def searchByTypeFieldValue(self, ty:T, field:str, value:str) -> list[Resource]:
 		"""Search and return all resources of a specific type and a value in a field,
 		and return them in an array."""
+		# def filterFunc(r:dict) -> bool:
+		# 	if 'ty' in r and r['ty'] == ty and field in r:
+		# 		f = r[field]
+		# 		if isinstance(f, (list, dict)):
+		# 			return value in f
+		# 		return value == f
+		# 	return False
+		def filterFunc(r:JSON) -> bool:
+			if 'ty' in r and r['ty'] == ty and field in r:
+				f = r[field]
+				if isinstance(f, (list, dict)):
+					return value in f
+				return value == f # type: ignore
+			return False
+
+
+		return self.searchByFilter(filterFunc)
+		# return self.searchByFilter(lambda r: 'ty' in r and r['ty'] == ty and field in r and r[field] == value)
+
+
+		# result = []
+		# for j in self.db.searchByTypeFieldValue(int(ty), field, value):
+		# 	res = CSE.dispatcher.resourceFromDict(j)
+		# 	if res.resource is not None:
+		# 		result.append(res.resource)
+		# return result
+
+
+	def searchByValueInField(self, field:str, value:str) -> list[Resource]:
+		"""Search and return all resources that have a specific value in a field,
+		and return them in an array."""
 		result = []
-		for j in self.db.searchByTypeFieldValue(ty, field, value):
-			resource, _ = Utils.resourceFromJSON(j)
-			if resource is not None:
-				result.append(resource)
+		for j in self.db.searchByValueInField(field, value):
+			res = Factory.resourceFromDict(j)
+			if res.resource is not None:
+				result.append(res.resource)
 		return result
+
+
+	def searchByFilter(self, filter:Callable[[JSON], bool]) -> list[Resource]:
+		"""	Return a list of resouces that match the given filter, or an empty list.
+		"""
+		result = []
+		for j in self.db.discoverResources(filter):
+			res = Factory.resourceFromDict(j)
+			if res.resource is not None:
+				result.append(res.resource)
+		return result
+
+		
+
+	def searchAnnounceableResourcesForCSI(self, csi:str, isAnnounced:bool) -> list[AnnounceableResource]:
+		""" Search and retrieve all resources that have the provided CSI in their 
+			'at' attribute.
+		"""
+		result = []
+
+		mcsi = f'{csi}/'
+		def _hasCSI(at:list[str]) -> bool:
+			for a in at:
+				if a == csi or a.startswith(mcsi):
+					return True
+			return False
+
+		def _announcedFilter(r:JSON) -> bool:
+			# if (at := r.get('at')) is not None and csi in at:
+			if (at := r.get('at')) is not None and _hasCSI(at):
+				if (isa := r.get(Resource._announcedTo)) is not None:
+					found = False
+					for i in isa:
+						if csi == i[0]:
+							found = True
+							break
+					return found == isAnnounced
+			return False
+
+		for j in self.db.discoverResources(_announcedFilter):
+			res = Factory.resourceFromDict(j)
+			if res.resource is not None:
+				result.append(res.resource)
+		return result
+
 
 
 	#########################################################################
@@ -240,32 +273,55 @@ class Storage(object):
 	##	Subscriptions
 	##
 
-	def getSubscription(self, ri: str) -> dict:
-		# Logging.logDebug('Retrieving subscription: %s' % ri)
+	def getSubscription(self, ri:str) -> JSON:
+		# Logging.logDebug(f'Retrieving subscription: {ri}')
 		subs = self.db.searchSubscriptions(ri=ri)
 		if subs is None or len(subs) != 1:
 			return None
 		return subs[0]
 
 
-	def getSubscriptionsForParent(self, pi: str) -> List[dict]:
-		# Logging.logDebug('Retrieving subscriptions for parent: %s' % pi)
+	def getSubscriptionsForParent(self, pi:str) -> list[Document]:
+		# Logging.logDebug(f'Retrieving subscriptions for parent: {pi}')
 		return self.db.searchSubscriptions(pi=pi)
 
 
-	def addSubscription(self, subscription: Resource) -> bool:
-		# Logging.logDebug('Adding subscription: %s' % ri)
+	def addSubscription(self, subscription:Resource) -> bool:
+		# Logging.logDebug(f'Adding subscription: {ri}')
 		return self.db.upsertSubscription(subscription)
 
 
-	def removeSubscription(self, subscription: Resource) -> bool:
-		# Logging.logDebug('Removing subscription: %s' % subscription.ri)
+	def removeSubscription(self, subscription:Resource) -> bool:
+		# Logging.logDebug(f'Removing subscription: {subscription.ri}')
 		return self.db.removeSubscription(subscription)
 
 
-	def updateSubscription(self, subscription : Resource) -> bool:
-		# Logging.logDebug('Updating subscription: %s' % ri)
+	def updateSubscription(self, subscription:Resource) -> bool:
+		# Logging.logDebug(f'Updating subscription: {ri}')
 		return self.db.upsertSubscription(subscription)
+
+
+
+
+	#########################################################################
+	##
+	##	BatchNotifications
+	##
+
+	def addBatchNotification(self, ri:str, nu:str, request:JSON, serialization:ContentSerializationType) -> bool:
+		return self.db.addBatchNotification(ri, nu, request, serialization)
+
+
+	def countBatchNotifications(self, ri:str, nu:str) -> int:
+		return self.db.countBatchNotifications(ri, nu)
+
+
+	def getBatchNotifications(self, ri:str, nu:str) -> list[Document]:
+		return self.db.getBatchNotifications(ri, nu)
+
+
+	def removeBatchNotifications(self, ri:str, nu:str) -> bool:
+		return self.db.removeBatchNotifications(ri, nu)
 
 
 	#########################################################################
@@ -273,11 +329,11 @@ class Storage(object):
 	##	Statistics
 	##
 
-	def getStatistics(self) -> dict:
+	def getStatistics(self) -> JSON:
 		return self.db.searchStatistics()
 
 
-	def updateStatistics(self, stats: dict) -> bool:
+	def updateStatistics(self, stats:JSON) -> bool:
 		return self.db.upsertStatistics(stats)
 
 
@@ -287,175 +343,16 @@ class Storage(object):
 	##	App Support
 	##
 
-	def getAppData(self, id: str) -> dict:
+	def getAppData(self, id:str) -> JSON:
 		return self.db.searchAppData(id)
 
 
-	def updateAppData(self, data: dict) -> bool:
+	def updateAppData(self, data:JSON) -> bool:
 		return self.db.upsertAppData(data)
 
 
-	def removeAppData(self, data: dict) -> bool:
+	def removeAppData(self, data:JSON) -> bool:
 		return self.db.removeAppData(data)
-
-
-	#########################################################################
-	##
-	##	Resource Expiration
-	##
-
-	def expirationDBWorker(self) -> bool:
-		Logging.logDebug('Looking for expired resources')
-		now = Utils.getResourceDate()
-		rs = self.db.discoverResources(lambda r: 'et' in r and (et := r['et']) is not None and et < now)
-		for j in rs:
-			r, _ = Utils.resourceFromJSON(j)
-			if r  is not None:
-				CSE.dispatcher.deleteResource(r, withDeregistration=True)
-
-		# Check all resources with maxInstanceAge (mia)
-		rs = self.db.discoverResources(lambda r: 'mia' in r)
-		for j in rs:
-			r, _ = Utils.resourceFromJSON(j)
-			if r is not None:
-				r.validateExpirations()
-		return True
-
-
-
-#########################################################################
-##
-##	internal utilities
-##
-
-
-# # handler function for discovery search and matching resources
-# def _testDiscovery(storage, r, rootSRN, handling, conditions, attributes, fo, lim, ofst, allLen):
-
-# 	# TODO: Implement a couple of optimizations. Can we determine earlier that a match will fail?
-
-# 	# check limits
-# 	# TinyDB doesn't support pagination. So we need to implement it here. See also offset below.
-# 	if lim is not None and handling['__returned__'] >= lim:
-# 		return False
-
-# 	# check for SRN first
-# 	# Add / to the "startswith" check to terminate the search string 
-# 	if (srn := r['__srn__']) is not None and rootSRN.count('/') >= srn.count('/') or not srn.startswith(rootSRN+'/') or srn == rootSRN:
-# 		return False
-
-# 	# Ignore virtual resources TODO: correct?
-# 	# if (ty := r.get('ty')) and ty in C.tVirtualResources:
-# 		# return False
-# 	ty = r.get('ty')
-
-# 	# ignore some resource types
-# 	if ty in [ C.tGRP_FOPT ]:
-# 		return False
-
-
-# 	# check level
-# 	if (h_lvl := handling.get('__lvl__')) is not None and srn.count('/') > h_lvl:
-# 		return False
-
-# 	# get the parent resource
-# 	#
-# 	#	TODO when determines how the parentAttribute is actually encoded
-# 	#
-# 	# pr = None
-# 	# if (pi := r.get('pi')) is not None:
-# 	# 	print(pi)
-# 	# 	pr = storage.retrieveResource(ri=pi)
-# 	# print(pr)
-# 	found = 0
-
-# 	# check conditions
-# 	if conditions is not None:
-# 		# found += 1 if (c_ty := conditions.get('ty')) is not None and (str(ty) == c_ty) else 0
-
-# 		if (ct := r.get('ct')) is not None:
-# 			found += 1 if (c_crb := conditions.get('crb')) is not None and (ct < c_crb) else 0
-# 			found += 1 if (c_cra := conditions.get('cra')) is not None and (ct > c_cra) else 0
-
-# 		if (lt := r.get('lt')) is not None:
-# 			found += 1 if (c_ms := conditions.get('ms')) is not None and (lt > c_ms) else 0
-# 			found += 1 if (c_us := conditions.get('us')) is not None and (lt < c_us) else 0
-
-# 		if (st := r.get('st')) is not None:
-# 			found += 1 if (c_sts := conditions.get('sts')) is not None and (str(st) > c_sts) else 0
-# 			found += 1 if (c_stb := conditions.get('stb')) is not None and (str(st) < c_stb) else 0
-
-# 		if (et := r.get('et')) is not None:
-# 			found += 1 if (c_exb := conditions.get('exb')) is not None and (et < c_exb) else 0
-# 			found += 1 if (c_exa := conditions.get('exa')) is not None and (et > c_exa) else 0
-
-# 		# special handling of label-list
-# 		if (lbl := r.get('lbl')) is not None and (c_lbl := conditions.get('lbl')) is not None:
-# 			lbla = c_lbl.split()
-# 			fnd = 0
-# 			for l in lbla:
-# 				fnd += 1 if l in lbl else 0
-# 			found += 1 if (fo == 1 and fnd == len(lbl)) or (fo == 2 and fnd > 0) else 0	# fo==or -> find any label
-# 			#	# TODO labelsQuery
-
-# 		# Types
-# 		# Multiple occurences of ty is always OR'ed. Therefore we add the count of
-# 		# ty's to found (to indicate that the whole set matches)
-# 		tys = conditions['ty']
-# 		found += len(tys) if str(ty) in tys else 0	
-
-# 		if ty in [ C.tCIN, C.tFCNT ]:	# special handling for CIN, FCNT
-# 			if (cs := r.get('cs')) is not None:
-# 				found += 1 if (sza := conditions.get('sza')) is not None and (str(cs) >= sza) else 0
-# 				found += 1 if (szb := conditions.get('szb')) is not None and (str(cs) < szb) else 0
-
-# 		# ContentFormats
-# 		# Multiple occurences of cnf is always OR'ed. Therefore we add the count of
-# 		# cnf's to found (to indicate that the whole set matches)
-# 		if ty in [ C.tCIN ]:	# special handling for CIN
-# 			cnfs = conditions['cty']
-# 			found += len(cnfs) if r.get('cnf') in cnfs else 0
-
-
-
-
-
-# 	# TODO childLabels
-# 	# TODO parentLabels
-# 	# TODO childResourceType
-# 	# TODO parentResourceType
-
-
-# 	# Attributes:
-# 	if attributes is not None:
-# 		for name in attributes:
-# 			val = attributes[name]
-# 			if '*' in val:
-# 				val = val.replace('*', '.*')
-# 				found += 1 if (rval := r.get(name)) is not None and re.match(val, str(rval)) else 0
-# 			else:
-# 				found += 1 if (rval := r.get(name)) is not None and str(val) == str(rval) else 0
-
-# 	# TODO childAttribute
-# 	# TODO parentAttribute
-
-
-# 	# Test whether the OR or AND criteria is fullfilled
-# 	if not ((fo == 2 and found > 0) or 		# OR and found something
-# 			(fo == 1 and allLen == found)	# AND and found everything
-# 	   	   ): 
-# 		return False
-
-
-# 	# Check offset. Dont match if offset not reached
-# 	handling['__matched__'] += 1
-# 	if ofst is not None and handling['__matched__'] <= ofst:
-# 		return False
-
-# 	handling['__returned__'] += 1
-# 	return True
-
-
 
 
 #########################################################################
@@ -470,38 +367,39 @@ class TinyDBBinding(object):
 	def __init__(self, path: str = None) -> None:
 		self.path = path
 		self.cacheSize = Configuration.get('db.cacheSize')
-		Logging.log('Cache Size: %s' % self.cacheSize)
+		Logging.log(f'Cache Size: {self.cacheSize:d}')
 
-		# create transaction locks
 		# create transaction locks
 		self.lockResources = Lock()
 		self.lockIdentifiers = Lock()
 		self.lockSubscriptions = Lock()
+		self.lockBatchNotifications = Lock()
 		self.lockStatistics = Lock()
 		self.lockAppData = Lock()
 
 
-	def openDB(self) -> None:
+	def openDB(self, postfix: str) -> None:
 		# All databases/tables will use the smart query cache
-		# TODO not compatible with TinyDB 4 yet?
-		# TinyDB.table_class = SmartCacheTable 
 		if Configuration.get('db.inMemory'):
 			Logging.log('DB in memory')
-			self.dbResources = TinyDB(storage=MemoryStorage)
-			self.dbIdentifiers = TinyDB(storage=MemoryStorage)
-			self.dbSubscriptions = TinyDB(storage=MemoryStorage)
-			self.dbStatistics = TinyDB(storage=MemoryStorage)
-			self.dbAppData = TinyDB(storage=MemoryStorage)
+			self.dbResources = TinyDB(storage=MemoryStorage)										# type: ignore
+			self.dbIdentifiers = TinyDB(storage=MemoryStorage)										# type: ignore
+			self.dbSubscriptions = TinyDB(storage=MemoryStorage)									# type: ignore
+			self.dbBatchNotifications = TinyDB(storage=MemoryStorage)								# type: ignore
+			self.dbStatistics = TinyDB(storage=MemoryStorage)										# type: ignore
+			self.dbAppData = TinyDB(storage=MemoryStorage)											# type: ignore
 		else:
 			Logging.log('DB in file system')
-			self.dbResources = TinyDB(self.path + '/resources.json')
-			self.dbIdentifiers = TinyDB(self.path + '/identifiers.json')
-			self.dbSubscriptions = TinyDB(self.path + '/subscriptions.json')
-			self.dbStatistics = TinyDB(self.path + '/statistics.json')
-			self.dbAppData = TinyDB(self.path + '/appdata.json')
+			self.dbResources = TinyDB(f'{self.path}/resources{postfix}.json')						# type: ignore
+			self.dbIdentifiers = TinyDB(f'{self.path}/identifiers{postfix}.json')					# type: ignore
+			self.dbSubscriptions = TinyDB(f'{self.path}/subscriptions{postfix}.json')				# type: ignore
+			self.dbBatchNotifications = TinyDB(f'{self.path}/batchNotifications{postfix}.json')		# type: ignore
+			self.dbStatistics = TinyDB(f'{self.path}/statistics{postfix}.json')						# type: ignore
+			self.dbAppData = TinyDB(f'{self.path}/appdata{postfix}.json')							# type: ignore
 		self.tabResources = self.dbResources.table('resources', cache_size=self.cacheSize)
 		self.tabIdentifiers = self.dbIdentifiers.table('identifiers', cache_size=self.cacheSize)
 		self.tabSubscriptions = self.dbSubscriptions.table('subsriptions', cache_size=self.cacheSize)
+		self.tabBatchNotifications = self.dbBatchNotifications.table('batchNotifications', cache_size=self.cacheSize)
 		self.tabStatistics = self.dbStatistics.table('statistics', cache_size=self.cacheSize)
 		self.tabAppData = self.dbAppData.table('appdata', cache_size=self.cacheSize)
 
@@ -511,6 +409,7 @@ class TinyDBBinding(object):
 		self.dbResources.close()
 		self.dbIdentifiers.close()
 		self.dbSubscriptions.close()
+		self.dbBatchNotifications.close()
 		self.dbStatistics.close()
 		self.dbAppData.close()
 
@@ -520,6 +419,7 @@ class TinyDBBinding(object):
 		self.tabResources.truncate()
 		self.tabIdentifiers.truncate()
 		self.tabSubscriptions.truncate()
+		self.tabBatchNotifications.truncate()
 		self.tabStatistics.truncate()
 		self.tabAppData.truncate()
 
@@ -531,34 +431,36 @@ class TinyDBBinding(object):
 
 	def insertResource(self, resource: Resource) -> None:
 		with self.lockResources:
-			self.tabResources.insert(resource.json)
+			self.tabResources.insert(resource.dict)
 	
 
 	def upsertResource(self, resource: Resource) -> None:
 		#Logging.logDebug(resource)
 		with self.lockResources:
-			self.tabResources.upsert(resource.json, Query().ri == resource.ri)	# Update existing or insert new when overwriting
+			# Update existing or insert new when overwriting
+			self.tabResources.upsert(resource.dict, Query().ri == resource.ri)		# type: ignore
 	
 
 	def updateResource(self, resource: Resource) -> Resource:
 		#Logging.logDebug(resource)
 		with self.lockResources:
 			ri = resource.ri
-			self.tabResources.update(resource.json, Query().ri == ri)
+			self.tabResources.update(resource.dict, Query().ri == ri)	# type: ignore
 			# remove nullified fields from db and resource
-			for k in list(resource.json):
-				if resource.json[k] is None:
-					self.tabResources.update(delete(k), Query().ri == ri)
-					del resource.json[k]
+			# TODO remove Null values recursively
+			for k in list(resource.dict):
+				if resource.dict[k] is None:
+					self.tabResources.update(delete(k), Query().ri == ri)	# type: ignore
+					del resource.dict[k]
 			return resource
 
 
 	def deleteResource(self, resource: Resource) -> None:
 		with self.lockResources:
-			self.tabResources.remove(Query().ri == resource.ri)
+			self.tabResources.remove(Query().ri == resource.ri)		# type: ignore
 	
 
-	def searchResources(self, ri: str = None, csi: str = None, srn: str = None, pi: str = None, ty: int = None) -> List[dict]:
+	def searchResources(self, ri:str=None, csi:str=None, srn:str=None, pi:str=None, ty:int=None, aei:str=None) -> list[Document]:
 
 		# find the ri first and then try again recursively
 		if srn is not None:
@@ -568,21 +470,23 @@ class TinyDBBinding(object):
 
 		with self.lockResources:
 			if ri is not None:
-				return self.tabResources.search(Query().ri == ri)
+				return self.tabResources.search(Query().ri == ri)	# type: ignore
 			elif csi is not None:
-				return self.tabResources.search(Query().csi == csi)
+				return self.tabResources.search(Query().csi == csi)	# type: ignore
 			elif pi is not None and ty is not None:
-				return self.tabResources.search((Query().pi == pi) & (Query().ty == ty))
+				return self.tabResources.search((Query().pi == pi) & (Query().ty == ty))	# type: ignore
 			elif pi is not None:
-				return self.tabResources.search(Query().pi == pi)
+				return self.tabResources.search(Query().pi == pi)	# type: ignore
 			elif ty is not None:
-				return self.tabResources.search(Query().ty == ty)
+				return self.tabResources.search(Query().ty == ty)	# type: ignore
+			elif aei is not None:
+				return self.tabResources.search(Query().aei == aei)	# type: ignore
 			return []
 
 
-	def discoverResources(self, func: Callable) -> List[dict]:
+	def discoverResources(self, func:Callable[[JSON], bool]) -> list[Document]:
 		with self.lockResources:
-			return self.tabResources.search(func)
+			return self.tabResources.search(func)	# type: ignore
 
 
 	def hasResource(self, ri: str = None, csi: str = None, srn: str = None, ty: int = None) -> bool:
@@ -593,11 +497,11 @@ class TinyDBBinding(object):
 				return self.hasResource(ri=identifiers[0]['ri'])
 		with self.lockResources:
 			if ri is not None:
-				return self.tabResources.contains(Query().ri == ri)
+				return self.tabResources.contains(Query().ri == ri)		# type: ignore
 			elif csi is not None:
-				return self.tabResources.contains(Query().csi == csi)
+				return self.tabResources.contains(Query().csi == csi)	# type: ignore
 			elif ty is not None:
-				return self.tabResources.contains(Query().ty == ty)
+				return self.tabResources.contains(Query().ty == ty)		# type: ignore
 			else:
 				return False
 
@@ -607,12 +511,21 @@ class TinyDBBinding(object):
 			return len(self.tabResources)
 
 
-	def  searchByTypeFieldValue(self, ty: int, field: str, value: Any) -> List[dict]:
-		"""Search and return all resources of a specific type and a value in a field,
+	# def  searchByTypeFieldValue(self, ty: int, field: str, value: Any) -> list[dict]:
+	# 	"""Search and return all resources of a specific type and a value in a field,
+	# 	and return them in an array."""
+	# 	with self.lockResources:
+	# 		# Q = Query()
+	# 		# return self.tabResources.search((Q.ty == ty) & (Q[field].any(value)))
+	# 		return self.tabResources.search(where[field].test(lambda s: value in s))
+
+
+	def  searchByValueInField(self, field: str, value: Any) -> list[Document]:
+		"""Search and return all resources of a value in a field,
 		and return them in an array."""
 		with self.lockResources:
-			return self.tabResources.search((Query().ty == ty) & (where(field).any(value)))
-
+			#return self.tabResources.search(where(field).any(value))
+			return self.tabResources.search(where(field).test(lambda s: value in s))	# type: ignore
 
 
 	#
@@ -625,20 +538,20 @@ class TinyDBBinding(object):
 			self.tabIdentifiers.upsert(
 				# ri, rn, srn 
 				{'ri' : ri, 'rn' : resource.rn, 'srn' : srn, 'ty' : resource.ty}, 
-				Query().ri == ri)
+				Query().ri == ri)	# type: ignore
 
 
 	def deleteIdentifier(self, resource: Resource) -> None:
 		with self.lockIdentifiers:
-			self.tabIdentifiers.remove(Query().ri == resource.ri)
+			self.tabIdentifiers.remove(Query().ri == resource.ri)	# type: ignore
 
 
-	def searchIdentifiers(self, ri: str = None, srn: str = None) -> List[dict]:
+	def searchIdentifiers(self, ri: str = None, srn: str = None) -> list[Document]:
 		with self.lockIdentifiers:
 			if srn is not None:
-				return self.tabIdentifiers.search(Query().srn == srn)
+				return self.tabIdentifiers.search(Query().srn == srn)		# type: ignore
 			elif ri is not None:
-				return self.tabIdentifiers.search(Query().ri == ri) 
+				return self.tabIdentifiers.search(Query().ri == ri) 		# type: ignore
 			return []
 
 
@@ -647,16 +560,16 @@ class TinyDBBinding(object):
 	#
 
 
-	def searchSubscriptions(self, ri : str = None, pi : str = None) -> List[dict]:
+	def searchSubscriptions(self, ri : str = None, pi : str = None) -> list[Document]:
 		with self.lockSubscriptions:
 			if ri is not None:
-				return self.tabSubscriptions.search(Query().ri == ri)
+				return self.tabSubscriptions.search(Query().ri == ri)		# type: ignore
 			if pi is not None:
-				return self.tabSubscriptions.search(Query().pi == pi)
+				return self.tabSubscriptions.search(Query().pi == pi)		# type: ignore
 			return None
 
 
-	def upsertSubscription(self, subscription : Resource) -> bool:
+	def upsertSubscription(self, subscription:Resource) -> bool:
 		with self.lockSubscriptions:
 			ri = subscription.ri
 			result = self.tabSubscriptions.upsert(
@@ -664,28 +577,67 @@ class TinyDBBinding(object):
 										'pi'  : subscription.pi,
 										'nct' : subscription.nct,
 										'net' : subscription['enc/net'],
-										'nus' : subscription.nu
+										'atr' : subscription['enc/atr'],
+										'chty': subscription['enc/chty'],
+										'exc' : subscription.exc,
+										'ln'  : subscription.ln,
+										'nus' : subscription.nu,
+										'bn'  : subscription.bn,
+										'exc' : subscription.exc,
 									}, 
-									Query().ri == ri)
+									Query().ri == ri)	# type: ignore
 			return result is not None
 
 
-	def removeSubscription(self, subscription: Resource) -> bool:
+	def removeSubscription(self, subscription:Resource) -> bool:
 		with self.lockSubscriptions:
-			return self.tabSubscriptions.remove(Query().ri == subscription.ri)
+			return len(self.tabSubscriptions.remove(Query().ri == subscription.ri)) > 0		# type: ignore
 
+
+	#
+	#	BatchNotifications
+	#
+
+	def addBatchNotification(self, ri:str, nu:str, notificationRequest:JSON, serialization:ContentSerializationType) -> bool:
+		with self.lockBatchNotifications:
+			result = self.tabBatchNotifications.insert(
+									{	'ri' 		: ri,
+										'nu' 		: nu,
+										'csz'		: serialization.value,
+										'tstamp'	: time.time(),
+										'request'	: notificationRequest
+									})
+			return result is not None
+
+
+	def countBatchNotifications(self, ri:str, nu:str) -> int:
+		with self.lockBatchNotifications:
+			q = Query()	# type: ignore
+			return self.tabBatchNotifications.count((q.ri == ri) & (q.nu == nu))
+
+
+	def getBatchNotifications(self, ri:str, nu:str) -> list[Document]:
+		with self.lockBatchNotifications:
+			q = Query()	# type: ignore
+			return self.tabBatchNotifications.search((q.ri == ri) & (q.nu == nu))
+
+
+	def removeBatchNotifications(self, ri:str, nu:str) -> bool:
+		with self.lockBatchNotifications:
+			q = Query()	# type: ignore
+			return len(self.tabBatchNotifications.remove((q.ri == ri) & (q.nu == nu))) > 0
 
 	#
 	#	Statistics
 	#
 
-	def searchStatistics(self) -> dict:
+	def searchStatistics(self) -> JSON:
 		with self.lockStatistics:
 			stats = self.tabStatistics.get(doc_id=1)
 			return stats if stats is not None and len(stats) > 0 else None
 
 
-	def upsertStatistics(self, stats: dict) -> bool:
+	def upsertStatistics(self, stats:JSON) -> bool:
 		with self.lockStatistics:
 			if len(self.tabStatistics) > 0:
 				return self.tabStatistics.update(stats, doc_ids=[1]) is not None
@@ -697,24 +649,24 @@ class TinyDBBinding(object):
 	#	App Data
 	#
 
-	def searchAppData(self, id: str) -> dict:
+	def searchAppData(self, id:str) -> JSON:
 		with self.lockAppData:
-			data = self.tabAppData.get(Query().id == id)
+			data = self.tabAppData.get(Query().id == id)	# type: ignore
 			return data if data is not None and len(data) > 0 else None
 
 
-	def upsertAppData(self, data: dict) -> bool:
+	def upsertAppData(self, data:JSON) -> bool:
 		with self.lockAppData:
 			if 'id' not in data:
 				return None
 			if len(self.tabAppData) > 0:
-				return self.tabAppData.update(data, Query().id == data['id']) is not None
+				return self.tabAppData.update(data, Query().id == data['id']) is not None 	# type: ignore
 			else:
 				return self.tabAppData.insert(data) is not None
 
 
-	def removeAppData(self, data: dict) -> bool:
+	def removeAppData(self, data:JSON) -> bool:
 		with self.lockAppData:
 			if 'id' not in data:
-				return None	
-			return self.tabAppData.remove(Query().id == data['id'])
+				return False	
+			return len(self.tabAppData.remove(Query().id == data['id'])) > 0 # type: ignore

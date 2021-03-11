@@ -1,21 +1,23 @@
-import requests
 import datetime, re, time, threading, os
 from urllib.request import urlopen
 from json import loads, dumps
 import IPython.display
 from IPython.display import JSON, HTML, Markdown
+import requests
 
 from config import *
 from annotations import *
-
-# variable to distinguish users
-_uid = ''
 
 # Parameter names
 _originator = 'X-M2M-Origin'
 _requestIdentifier = 'X-M2M-RI'
 _resourceType = 'ResourceType'
 _releaseVersionIndicator = "X-M2M-RVI"
+
+# variable to distinguish users
+_uid = ''
+
+null = None	# for JSON null keyword
 
 def printmd(s, c=None):
     """ Print and format as Markdown.
@@ -107,48 +109,73 @@ def printStructure() -> None:
     if (resp := requests.get(f'{host}/__structure__/text')).status_code == 200:
         printmdCode(annotateRT(resp.text))
 
-def _sendRequest(method, **headers) -> str:
+
+def _sendRequest(method, **parameters) -> str:
     """ Check and update the given parameters, and send a request with the given method.
     """
 
     # check and extract some parameters. Most parameters need individual handling.
-    if (target := headers.pop('target', None)) is None:
+    if (target := parameters.pop('target', None)) is None:
         return '<b>target</b> parameter is missing'
 
-    if (content := headers.pop('content', None)) is None and method in [ requests.post, requests.put ]:
+    if (content := parameters.pop('content', None)) is None and method in [ requests.post, requests.put ]:
         return '<b>content</b> parameter is missing'
     if content is not None: # could be None when method is get() or delete()
         content = content if isinstance(content, str) else dumps(content)   # Transform content to JSON 
 
-    if (resourceType := headers.pop('resourceType', None)) is None and method in [ requests.post ]:
+    if (resourceType := parameters.pop('resourceType', None)) is None and method in [ requests.post ]:
         return '<b>resourceType</b> parameter is missing'
+    if not isinstance(resourceType, int):
+        return '<b>resourceType</b> parameter must be an integer number'
 
-    if (originator := headers.pop('originator', None)) is None:
+    if (originator := parameters.pop('originator', None)) is None:
         return '<b>originator</b> parameter is missing'
-    headers[_originator] = originator
+    if not isinstance(originator, str):
+        return '<b>originator</b> parameter must be a string'
+    parameters[_originator] = originator
 
-    if (ri := headers.pop('requestIdentifier', None)) is None:
+    if (ri := parameters.pop('requestIdentifier', None)) is None:
         return '<b>requestIdentifier</b> parameter is missing'
-    headers[_requestIdentifier] = ri
+    if not isinstance(ri, str):
+        return '<b>requestIdentifier</b> parameter must be a string'
+    parameters[_requestIdentifier] = ri
 
-    if (rvi := headers.pop('releaseVersionIndicator', None)) is None:
+    if (rvi := parameters.pop('releaseVersionIndicator', None)) is None:
         return '<b>releaseVersionIndicator</b> parameter is missing'
-    headers[_releaseVersionIndicator] = rvi
+    if not isinstance(rvi, str):
+        return '<b>releaseVersionIndicator</b> parameter must be a string'
+    parameters[_releaseVersionIndicator] = rvi
     
-    headers['Content-Type'] = f'application/json{f";ty={resourceType}" if resourceType is not None else ""}'
-    headers['Accept'] = 'application/json'  # Always send an 'Accept' header even when not needed
+    parameters['Content-Type'] = f'application/json{f";ty={resourceType}" if resourceType is not None else ""}'
+    parameters['Accept'] = 'application/json'  # Always send an 'Accept' header even when not needed
+
+    args = ''
+    if (fu := parameters.pop('filterUsage', None)) is not None:
+        if not isinstance(fu, int):
+            return '<b>filterUsage</b> parameter must be an integer number'
+        args += f'fu={fu}'
+    if (rcn := parameters.pop('resultContent', None)) is not None:
+        if not isinstance(rcn, int):
+            return '<b>resultContent</b> parameter must be an integer number'
+        args += f'{"&" if len(args)>0 else ""}rcn={rcn}'
+    if (lvl := parameters.pop('level', None)) is not None:
+        if not isinstance(lvl, int):
+            return '<b>level</b> parameter must be an integer number'
+        args += f'{"&" if len(args)>0 else ""}lvl={lvl}'
 
     try:
-        url = host + target
+        args = '?' + args if len(args) > 0 else ''
+        url = f'{host}{target}{args}'
         if content is not None:
-            response = method(url, headers=headers, data=content)
+            response = method(url, headers=parameters, data=content)
         else:
-            response = method(url, headers=headers)
-        printRequest(url, headers, content)
+            response = method(url, headers=parameters)
+        printRequest(url, parameters, content)
         printResponse(response)
         printStructure()
         printmd('---')
-    except:
+    except Exception as e:
+        print(e)
         printConnectionError()
 
 
@@ -180,6 +207,8 @@ def DELETE(**kwargs) -> None:
         printHtmlError(err)
 
 
+##############################################################################
+
 # Notification Server Query
 # The following function queries the notification server
 
@@ -193,6 +222,17 @@ def queryNotificationServer():
             printmd('### Received Notification - ' + str(datetime.datetime.now()))
             print(result.text)
         time.sleep(1)
+
+
+##############################################################################
+
+def checkCSEConnection(id:str):
+    try:
+        r = requests.get(f'{host}/{id}')
+    except Exception as e:
+        print(e)
+        return False
+    return True
 
 
 # The following Exception class is used to show a dialog to the user and gracefully stops the execution
@@ -219,12 +259,7 @@ def highlightDebugMessage(text):
     return text
 
 
-def checkCSEConnection(id:str):
-    try:
-        r = requests.get(f'{host}/{id}')
-    except:
-        return False
-    return True
+
 
 # At the end of the init check whether the CSE is up and running
 if not checkCSEConnection(cseRN):

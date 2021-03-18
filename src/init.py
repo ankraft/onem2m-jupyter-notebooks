@@ -14,6 +14,8 @@ _requestIdentifier = 'X-M2M-RI'
 _resourceType = 'ResourceType'
 _releaseVersionIndicator = "X-M2M-RVI"
 
+null = None # for JSON null
+
 # variable to distinguish users
 _uid = ''
 
@@ -125,7 +127,7 @@ def _sendRequest(method, **parameters) -> str:
 
     if (resourceType := parameters.pop('resourceType', None)) is None and method in [ requests.post ]:
         return '<b>resourceType</b> parameter is missing'
-    if not isinstance(resourceType, int):
+    if resourceType is not None and not isinstance(resourceType, int):
         return '<b>resourceType</b> parameter must be an integer number'
 
     if (originator := parameters.pop('originator', None)) is None:

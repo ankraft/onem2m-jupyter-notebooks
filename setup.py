@@ -16,6 +16,9 @@ setup(
         'requests',
         'rich',
         'tinydb',
+
+        'pandas',
+        'matplotlib',
      ]
 
 

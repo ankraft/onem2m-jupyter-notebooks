@@ -7,6 +7,7 @@ import requests
 
 from config import *
 from annotations import *
+from simulator import *
 
 # Parameter names
 _originator = 'X-M2M-Origin'
@@ -14,20 +15,19 @@ _requestIdentifier = 'X-M2M-RI'
 _resourceType = 'ResourceType'
 _releaseVersionIndicator = "X-M2M-RVI"
 
-null = None # for JSON null
+# for JSON null keyword
+null = None	
 
-# variable to distinguish users
-_uid = ''
+# Contains the latest response or None
+_response = None
 
-null = None	# for JSON null keyword
-
-def printmd(s, c=None):
+def printmd(s, c=None, hd=''):
     """ Print and format as Markdown.
     """
     if c:
-        cs = f"<span style='color:{c}'>{s}</span>"
+        cs = f"{hd}<span style='color:{c}'>{s}</span>"
     else:
-        cs = s
+        cs = f'{hd}{s}'
     IPython.display.display(Markdown(cs))
 
 
@@ -75,7 +75,8 @@ def printStatusCode(statusCode, reason):
 def printRequest(url, parameters, content=None):
     """ Print the request. 
     """
-    printmd(f'---\n### HTTP Request')
+    printmd(f'### HTTP Request')
+    # printmd(f'---\n### HTTP Request')
     printmd(f'**{url}**')
     printParameters(parameters)
     if content is not None:
@@ -93,7 +94,6 @@ def printResponse(r):
     if r.text:
         printmd('\n**Result Content**\n')
         printJSON(r.text)
-
 
 def printHtmlError(s):
     printHtml(f'<div class="alert alert-block alert-danger">{s}</div>')
@@ -113,6 +113,9 @@ def printStructure() -> None:
 
 
 def _sendRequest(method, **parameters) -> str:
+    global _response
+    _response = None
+
     """ Check and update the given parameters, and send a request with the given method.
     """
 
@@ -164,18 +167,31 @@ def _sendRequest(method, **parameters) -> str:
         if not isinstance(lvl, int):
             return '<b>level</b> parameter must be an integer number'
         args += f'{"&" if len(args)>0 else ""}lvl={lvl}'
+    if (ty := parameters.pop('resourceType', None)) is not None:
+        if not isinstance(ty, int):
+            return '<b>resourceType</b> parameter must be an integer number'
+        args += f'{"&" if len(args)>0 else ""}ty={ty}'
+
+    # Check verbosity
+    _verbose = True
+    if (verb := parameters.pop('_verbose', None)) is not None:
+        if not isinstance(verb, bool):
+            return '<b>_verbose</b> parameter must be a boolean'
+        _verbose = verb
 
     try:
         args = '?' + args if len(args) > 0 else ''
         url = f'{host}{target}{args}'
         if content is not None:
-            response = method(url, headers=parameters, data=content)
+            resp = method(url, headers=parameters, data=content)
         else:
-            response = method(url, headers=parameters)
-        printRequest(url, parameters, content)
-        printResponse(response)
-        printStructure()
-        printmd('---')
+            resp = method(url, headers=parameters)
+        _response = resp.json()
+        if _verbose:
+            printRequest(url, parameters, content)
+            printResponse(resp)
+            printStructure()
+            printmd('---')
     except Exception as e:
         print(e)
         printConnectionError()
@@ -208,6 +224,12 @@ def DELETE(**kwargs) -> None:
     if (err := _sendRequest(requests.delete, **kwargs)) is not None:
         printHtmlError(err)
 
+
+def repeat(times=1, request=None) -> None:
+    if request is not None:
+        for i in range(1, times+1):
+            printmd(f'Request {i}', c='grey', hd='## ')
+            request()
 
 ##############################################################################
 
@@ -251,6 +273,41 @@ class StopExecution(Exception):
 
 def nu():
     return notificationURLBase + ':' + str(notificationPort)
+
+def response() -> dict:
+    return _response
+
+decimalMatch = re.compile(r'{(\d+)}')
+def findXPath(dct, element, default=None):
+	""" Find a structured element in dictionary.
+		Example: findXPath(resource, 'm2m:cin/{1}/lbl/{0}')
+	"""
+
+	if element is None or dct is None:
+		return default
+
+	paths = element.split("/")
+	data:Any = dct
+	for i in range(0,len(paths)):
+		if data is None:
+		 	return default
+		pathElement = paths[i]
+		if len(pathElement) == 0:	# return if there is an empty path element
+			return default
+		elif (m := decimalMatch.search(pathElement)) is not None:	# Match array index {i}
+			idx = int(m.group(1))
+			if not isinstance(data, (list,dict)) or idx >= len(data):	# Check idx within range of list
+				return default
+			if isinstance(data, dict):
+				data = data[list(data)[i]]
+			else:
+				data = data[idx]
+		elif pathElement not in data:	# if key not in dict
+			return default
+		else:
+			data = data[pathElement]	# found data for the next level down
+	return data
+
 
 
 # Print debug messages in red

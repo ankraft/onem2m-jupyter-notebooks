@@ -19,7 +19,9 @@ _releaseVersionIndicator = "X-M2M-RVI"
 null = None	
 
 # Contains the latest response or None
-_response = None
+__response = None
+
+__verbose = True
 
 def printmd(s, c=None, hd=''):
     """ Print and format as Markdown.
@@ -39,10 +41,13 @@ def printmdCode(s):
     lines = s.split('\n')
     result = ''
     for l in lines:
-        stripped = l.lstrip()
+        l = l.rstrip()          # Remove all ws from the end
+        stripped = l.lstrip()   # Return a version where all ws is removed from the beginning
         li = "<span style='font-family: monospace;'>" +'&nbsp;' * (len(l) - len(stripped)) + stripped + '</span>  \n' 
+        li = li.replace('   ', '&nbsp;&nbsp;&nbsp;') # replace all 3*space in the middle
         result += li.replace('\x03', '\n')  # Replace possible \x03 marker with newlines, e.g. in annotations
     IPython.display.display(Markdown(result))
+
 
 def printJSON(j):
     """ Format and print JSON.
@@ -95,6 +100,15 @@ def printResponse(r):
         printmd('\n**Result Content**\n')
         printJSON(r.text)
 
+
+def printShortResponse(r):
+    """ Print terse response code. 
+    """
+    printStatusCode(r.status_code, r.reason)
+    if not 200 <= r.status_code < 300:
+        printJSON(r.text)
+
+
 def printHtmlError(s):
     printHtml(f'<div class="alert alert-block alert-danger">{s}</div>')
 
@@ -113,8 +127,8 @@ def printStructure() -> None:
 
 
 def _sendRequest(method, **parameters) -> str:
-    global _response
-    _response = None
+    global __response, __verbose
+    __response = None
 
     """ Check and update the given parameters, and send a request with the given method.
     """
@@ -173,11 +187,11 @@ def _sendRequest(method, **parameters) -> str:
         args += f'{"&" if len(args)>0 else ""}ty={ty}'
 
     # Check verbosity
-    _verbose = True
-    if (verb := parameters.pop('_verbose', None)) is not None:
-        if not isinstance(verb, bool):
-            return '<b>_verbose</b> parameter must be a boolean'
-        _verbose = verb
+    _verbose = __verbose
+    if (silent := parameters.pop('_silent', None)) is not None:
+        if not isinstance(silent, bool):
+            return '<b>_silent</b> parameter must be a boolean'
+        _verbose = not silent
 
     try:
         args = '?' + args if len(args) > 0 else ''
@@ -186,12 +200,15 @@ def _sendRequest(method, **parameters) -> str:
             resp = method(url, headers=parameters, data=content)
         else:
             resp = method(url, headers=parameters)
-        _response = resp.json()
+        __response = resp.json()
         if _verbose:
             printRequest(url, parameters, content)
             printResponse(resp)
             printStructure()
             printmd('---')
+        elif silent is None:
+            printShortResponse(resp)
+
     except Exception as e:
         print(e)
         printConnectionError()
@@ -228,7 +245,8 @@ def DELETE(**kwargs) -> None:
 def repeat(times=1, request=None) -> None:
     if request is not None:
         for i in range(1, times+1):
-            printmd(f'Request {i}', c='grey', hd='## ')
+            if __verbose:
+                printmd(f'Request {i}', c='grey', hd='## ')
             request()
 
 ##############################################################################
@@ -274,8 +292,26 @@ class StopExecution(Exception):
 def nu():
     return notificationURLBase + ':' + str(notificationPort)
 
+
 def response() -> dict:
-    return _response
+    """ Return the last response.
+    """
+    return __response
+
+
+def verbose():
+    """ Set the verbosity to True.
+    """
+    global __verbose
+    __verbose = True
+
+
+def noverbose():
+    """ Set the verbosity to False.
+    """
+    global __verbose
+    __verbose = False
+
 
 decimalMatch = re.compile(r'{(\d+)}')
 def findXPath(dct, element, default=None):

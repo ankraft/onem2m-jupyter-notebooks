@@ -16,6 +16,7 @@ _resourceType = 'ResourceType'
 _releaseVersionIndicator = "X-M2M-RVI"
 
 # Resource Type names
+tyACP             =  1
 tyAE              =  2
 tyContainer       =  3
 tyContentInstance =  4

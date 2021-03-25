@@ -15,6 +15,13 @@ _requestIdentifier = 'X-M2M-RI'
 _resourceType = 'ResourceType'
 _releaseVersionIndicator = "X-M2M-RVI"
 
+# Resource Type names
+tyAE              =  2
+tyContainer       =  3
+tyContentInstance =  4
+tyFlexContainer   = 28
+
+
 # for JSON null keyword
 null = None	
 
@@ -181,9 +188,9 @@ def _sendRequest(method, **parameters) -> str:
         if not isinstance(lvl, int):
             return '<b>level</b> parameter must be an integer number'
         args += f'{"&" if len(args)>0 else ""}lvl={lvl}'
-    if (ty := parameters.pop('resourceType', None)) is not None:
+    if (ty := parameters.pop('childType', None)) is not None:
         if not isinstance(ty, int):
-            return '<b>resourceType</b> parameter must be an integer number'
+            return '<b>childType</b> parameter must be an integer number'
         args += f'{"&" if len(args)>0 else ""}ty={ty}'
 
     # Check verbosity
@@ -272,7 +279,7 @@ def checkCSEConnection(id:str):
     try:
         r = requests.get(f'{host}/{id}')
     except Exception as e:
-        print(e)
+        #print(e)
         return False
     return True
 
@@ -293,7 +300,7 @@ def nu():
     return notificationURLBase + ':' + str(notificationPort)
 
 
-def response() -> dict:
+def lastResponse() -> dict:
     """ Return the last response.
     """
     return __response

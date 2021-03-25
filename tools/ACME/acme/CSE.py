@@ -37,6 +37,7 @@ from helpers.BackgroundWorker import BackgroundWorkerPool
 
 
 
+
 # singleton main components. These variables will hold all the various manager
 # components that are used throughout the CSE implementation.
 announce:AnnouncementManager					= None
@@ -67,6 +68,7 @@ cseRn:str										= None
 cseOriginator:str								= None
 defaultSerialization:ContentSerializationType	= None
 isHeadless 										= False
+shuttingDown									= False
 
 
 
@@ -185,7 +187,8 @@ def startup(args:argparse.Namespace, **kwargs: Dict[str, Any]) -> None:
 	
 	Logging.log('CSE started')
 	if isHeadless:
-		Logging.console('CSE started')
+		# when in headless mode give the CSE a moment (2s) to experience fatal errors before printing the start message
+		BackgroundWorkerPool.newActor(delay=2, workerCallback=lambda : Logging.console('CSE started') if not shuttingDown else None ).start()
 
 	#
 	#	Enter an endless loop.
@@ -205,22 +208,36 @@ def startup(args:argparse.Namespace, **kwargs: Dict[str, Any]) -> None:
 		'r'		: _keyCSERegistrations,
 		's'		: _keyStatistics,
 		't'		: _keyResourceTree,
+		'T'		: _keyChildResourceTree,
 		'w'		: _keyWorkers,
 	}
 
 	#	Endless runtime loop. This handles key input & commands
 	#	The CSE's shutdown happens in one of the key handlers below
 	loop(commands, catchKeyboardInterrupt=True, headless=args.headless)
+	shutdown()
 
 
 def shutdown() -> None:
-	stopLoop()	# This will end the main run loop
+	"""	Gracefully shutdown the CSE programmatically. This will end the mail console loop
+		to terminate.
+		The actual shutdown happens in the _shutdown() method.
+	"""
+	global shuttingDown
+	
+	# indicating the shutting down status. When running in another environment the
+	# atexit-handler might not be called. Therefore, we need to set it here
+	shuttingDown = True		
+	stopLoop()				# This will end the main run loop.
+	if isHeadless:
+		Logging.console('CSE shutting down')
 
 
 @atexit.register
 def _shutdown() -> None:
-	"""	Gracefully shutdown the CSE, e.g. when receiving a keyboard interrupt.
+	"""	shutdown the CSE, e.g. when receiving a keyboard interrupt or at the end of the programm run.
 	"""
+
 	Logging.log('CSE shutting down')
 	if event is not None:
 		event.cseShutdown() 	# type: ignore
@@ -288,6 +305,7 @@ def stopApps() -> None:
 def _keyHelp(key:str) -> None:
 	"""	Print help for keyboard commands.
 	"""
+	Logging.console(f'\n[white][dim][[/dim][red][i]ACME[/i][/red][dim]] {C.version}', plain=True)
 	Logging.console("""**Console Commands**  
 - h, ?  - This help
 - Q, ^C - Shutdown CSE
@@ -299,8 +317,8 @@ def _keyHelp(key:str) -> None:
 - r     - Show CSE registrations
 - s     - Show statistics
 - t     - Show resource tree
+- T     - Show child resource tree
 - w     - Show worker threads status
--
 """, extranl=True)
 
 
@@ -322,24 +340,38 @@ def _keyToggleLogging(key:str) -> None:
 def _keyWorkers(key:str) -> None:
 	"""	Print the worker and actor threads.
 	"""
-	result = '**Worker & Actor Threads**\n'
+	from rich.table import Table
+
+	Logging.console('**Worker & Actor Threads**', extranl=True)
+	table = Table()
+	table.add_column('Name', no_wrap=True)
+	table.add_column('Type', no_wrap=True)
+	table.add_column('Interval', no_wrap=True)
+	table.add_column('Runs', no_wrap=True)
 	for w in BackgroundWorkerPool.backgroundWorkers.values():
-		a = 'A' if w.count == 1 else 'W'
-		result += f'- {w.name:20} ({a}) | interval : {w.updateIntervall:<8} | runs : {w.numberOfRuns:<8}\n'
-	Logging.console(result, extranl=True)
+		a = 'Actor' if w.count == 1 else 'Worker'
+		table.add_row(w.name, a, str(w.updateIntervall), str(w.numberOfRuns))
+	Logging.console(table, extranl=True)
 
 
 def _keyConfiguration(key:str) -> None:
 	"""	Print the configuration.
 	"""
-	result = '**Configuration**\n'
+	from rich.table import Table
+
+	Logging.console('**Configuration**', extranl=True)
 	conf = Configuration.print().split('\n')
+	conf.sort()
+	table = Table()
+	table.add_column('Key', no_wrap=True)
+	table.add_column('Value', no_wrap=False)
 	for c in conf:
 		if c.startswith('Configuration:'):
 			continue
-		c = c.replace('*', '\\*')
-		result += f'- {c}\n'
-	Logging.console(result, extranl=True)
+		kv = c.split(' = ', 1)
+		if len(kv) == 2:
+			table.add_row(kv[0].strip(), kv[1])
+	Logging.console(table, extranl=True)
 
 
 def _keyClearScreen(key:str) -> None:
@@ -354,6 +386,24 @@ def _keyResourceTree(key:str) -> None:
 	Logging.console('**Resource Tree**', extranl=True)
 	Logging.console(statistics.getResourceTreeRich())
 	Logging.console()
+
+
+def _keyChildResourceTree(key:str) -> None:
+	"""	Render the CSE's resource tree, beginning with a child resource.
+	"""
+	Logging.console('**Child Resource Tree**', extranl=True)
+	loggingOld = Logging.loggingEnabled
+	Logging.loggingEnabled = False
+	
+	if (ri := readline('ri=')) is None:
+		Logging.console()
+	elif len(ri) > 0:
+		if (tree := statistics.getResourceTreeRich(parent=ri)) is not None:
+			Logging.console(tree)
+		else:
+			Logging.console('not found', isError=True)
+
+	Logging.loggingEnabled = loggingOld
 
 
 def _keyCSERegistrations(key:str) -> None:

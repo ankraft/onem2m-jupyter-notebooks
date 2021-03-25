@@ -345,7 +345,7 @@ skinparam rectangle {
 
 
 
-	def getResourceTreeRich(self, maxLevel:int=0) -> Tree:
+	def getResourceTreeRich(self, maxLevel:int=0, parent:str=None) -> Tree:
 		"""	This function will generate a Rich tree of a CSE's resource structure.
 		"""
 
@@ -367,9 +367,13 @@ skinparam rectangle {
 				branch = tree.add(info(ch))
 				getChildren(ch, branch, level+1)
 
-		cse = Utils.getCSE().resource
-		tree = Tree(info(cse))
-		getChildren(cse, tree, 0)
+		if parent is not None:
+			if (res := CSE.dispatcher.retrieveResource(parent).resource) is None:
+				return None
+		else:
+			res = Utils.getCSE().resource
+		tree = Tree(info(res))
+		getChildren(res, tree, 0)
 		return tree
 
 
@@ -377,14 +381,6 @@ skinparam rectangle {
 		"""	This function will generate a Text tree of a CSE's resource structure.
 		"""
 		from rich.console import Console
-		from io import StringIO
-
-		# The following code has problems with Jupyter notebooks.
-		# It prints in the notebook instead of the buffer
-		# buf = StringIO()
-		# console = Console(file=buf)
-		# console.print(self.getResourceTreeRich())
-		# return buf.getvalue()
 
 		console = Console(color_system=None)
 		console.begin_capture()

@@ -4,7 +4,6 @@ cseRN                 = 'cse-in'                             # The basename of t
 cseID                 = 'id-in'
 host                  = 'http://localhost:8080/'             # Base URL of the host
 url                   =  host + cseRN                     # The URL of the CSE we want to connect to
-#url                   = 'http://localhost:8080/' + basename # The URL of the CSE we want to connect to
 originator            = 'CAdmin'                             # Originator ID to access the CSE
 notificationPort      = 8000                                 # Port that the Notification Server binds to
 notificationInterface = ''                                   # Network interface the  Notifcation Server binds to

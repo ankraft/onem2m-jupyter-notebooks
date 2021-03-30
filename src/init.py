@@ -161,14 +161,14 @@ def _sendRequest(method, **parameters) -> str:
         return '<b>originator</b> parameter must be a string'
     parameters[_originator] = originator
 
-    if (ri := parameters.pop('requestIdentifier', None)) is None:
-        return '<b>requestIdentifier</b> parameter is missing'
+    if len(ri := parameters.pop('requestIdentifier', f'{originator}-ri-123')) == 0:
+        return '<b>requestIdentifier</b> parameter must not be empty'
     if not isinstance(ri, str):
         return '<b>requestIdentifier</b> parameter must be a string'
     parameters[_requestIdentifier] = ri
 
-    if (rvi := parameters.pop('releaseVersionIndicator', None)) is None:
-        return '<b>releaseVersionIndicator</b> parameter is missing'
+    if len(rvi := parameters.pop('releaseVersionIndicator', '3')) == 0:
+        return '<b>releaseVersionIndicator</b> parameter must not be empty'
     if not isinstance(rvi, str):
         return '<b>releaseVersionIndicator</b> parameter must be a string'
     parameters[_releaseVersionIndicator] = rvi
@@ -352,6 +352,15 @@ def findXPath(dct, element, default=None):
 			data = data[pathElement]	# found data for the next level down
 	return data
 
+
+def getDate(delta:int = 0) -> str:
+    return toISO8601Date(datetime.datetime.utcnow() + datetime.timedelta(seconds=delta))
+
+
+def toISO8601Date(ts) -> str:
+    if isinstance(ts, float):
+        ts = datetime.datetime.utcfromtimestamp(ts)
+    return ts.strftime('%Y%m%dT%H%M%S,%f')
 
 
 # Print debug messages in red

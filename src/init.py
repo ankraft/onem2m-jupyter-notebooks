@@ -1,5 +1,6 @@
 import datetime, re, time, threading, os
 from urllib.request import urlopen
+from enum import IntEnum
 from json import loads, dumps
 import IPython.display
 from IPython.display import JSON, HTML, Markdown
@@ -16,11 +17,27 @@ _resourceType = 'ResourceType'
 _releaseVersionIndicator = "X-M2M-RVI"
 
 # Resource Type names
-tyACP             =  1
-tyAE              =  2
-tyContainer       =  3
-tyContentInstance =  4
-tyFlexContainer   = 28
+class Type(IntEnum):
+	ACP             =  1
+	AE              =  2
+	Container       =  3
+	ContentInstance =  4
+	FlexContainer   = 28
+
+# Result Content Types
+
+class RCN(IntEnum):
+	nothing									= 0
+	attributes 								= 1
+	hierarchicalAddress						= 2
+	hierarchicalAddressAttributes			= 3
+	attributesAndChildResources				= 4	
+	attributesAndChildResourceReferences	= 5
+	childResourceReferences					= 6
+	originalResource 						= 7
+	childResources							= 8
+	modifiedAttributes						= 9
+	discoveryResultReferences				= 11
 
 
 # for JSON null keyword

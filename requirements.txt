@@ -44,7 +44,7 @@ pillow==8.1.2
     # via matplotlib
 psutil==5.7.0
     # via oneM2M-jupyter-notebooks (setup.py)
-pygments==2.6.1
+pygments==2.8.1
     # via rich
 pyparsing==2.4.7
     # via matplotlib

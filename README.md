@@ -20,7 +20,7 @@ This repository contains a number of [Jupyter Notebooks](https://jupyter.org) th
 
 #### Configuration
 
-Please change the configuration in the file [config.py](config.py) according to your setup. Normally, it shouldn't be necessary to change this when using the vanilla configuration from the *Eclipse om2m* installation.
+Please change the configuration in the file [config.py](src/config.py) according to your setup. Normally, it shouldn't be necessary to change this when you are using the provided CSE and notification server.
 
 - **basename** : The basename of the CSE.
 - **url** : The URL of the CSE we want to connect to in the examples in the notebooks.
@@ -43,16 +43,16 @@ The notebooks have been tested with the [ACME oneM2M CSE](https://github.com/ank
 #### Prerequisite
 The notebooks use
 
-- Python 3.
-- The [requests](http://python-requests.org) library
+- At least Python 3.8
+- Further Python libraries need to be with the followig command:
 
-		pip3 install requests
+		pip3 install -r requirements.txt
 
 
 #### Installation
 - Install Jupyter locally. See [Installing the Jupyter Notebook](https://jupyter.org/install) for further details
 - Start a local Jupyter Notebook server in the directory of this repository's copy (s.a.). See [Running the Notebook](https://jupyter.readthedocs.io/en/latest/running.html#running) for further details.  
-For a local installation with out an authentication token the command could be
+For a local installation with out an authentication token the command is
 
 		jupyter notebook --NotebookApp.token=''
 
@@ -69,7 +69,7 @@ If you run the Jupyter Notebook server without authentication token (see the *--
 
 <a name="docker"></a>
 ## Docker
-This section explains how to generate a Docker container for the notebooks and running it.
+This section explains how to generate a Docker container for the notebooks and running it. The support files are located in the directory [tools/Docker](tools/Docker).
 
 ### Building a Docker Container
 
@@ -96,7 +96,7 @@ You might also just download a pre-provisioned version of the notebooks from [ht
 
 	docker run -p 8888:8888 --rm --name onem2m-notebooks ankraft/onem2m-notebooks
 
-### Running a Complete Istallation with Docker Compose
+### Running a Prepared Installation with Docker Compose
 To run the the notebooks together with a pre-configured [ACME CSE](https://github.com/ankraft/ACME-oneM2M-CSE):
 
 - In a terminal shell in the [same directory](tools/Docker) as the [docker-compose.yml](tools/Docker/docker-compose.yml) file resides, run the command ```docker-compose up -d```

@@ -293,11 +293,21 @@ def queryNotificationServer():
 
 ##############################################################################
 
-def checkCSEConnection(id:str):
+def checkCSEConnection(id:str) -> bool:
+    """ Check the connection to the CSE.
+    """
     try:
         r = requests.get(f'{host}/{id}')
     except Exception as e:
-        #print(e)
+        return False
+    return True
+
+
+def cleanCSE():
+    try:
+        r = requests.get(f'{host}/__reset__')
+        return r.status_code == 200
+    except Exception as e:
         return False
     return True
 

@@ -1,4 +1,7 @@
 # oneM2M Jupyter Notebooks
+
+<font size="+4" color="red">Development Version - Under Construction </font>
+
 This repository contains a number of [Jupyter Notebooks](https://jupyter.org) that give a practical introduction to programmatically interacting with a [oneM2M](http://www.onem2m.org) CSE. The notebooks explain how to access a  CSE, add and update resources, and more.
 
 - [Installation and Running](#installation)  
@@ -7,7 +10,8 @@ This repository contains a number of [Jupyter Notebooks](https://jupyter.org) th
 - [Using the Notebooks](#using)  
 
 
-[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/ankraft/onem2m-jupyter-notebooks/development)
+
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/ankraft/onem2m-jupyter-notebooks/version2?filepath=_START_.ipynb)
 
 
 <a name="installation"></a>

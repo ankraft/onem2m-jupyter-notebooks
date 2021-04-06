@@ -12,8 +12,10 @@ from NodeBase import *
 from Logging import Logging
 from Configuration import Configuration
 from resources import BAT
-import psutil 	# type: ignore
+import CSE, Utils
+# import psutil 	# type: ignore
 import socket, platform, re, uuid, traceback
+from Types import ResponseCode as RC, JSON
 
 
 
@@ -39,7 +41,7 @@ class CSENode(NodeBase):
 		self.createDeviceInfo()
 
 		# Add a thread to read and update the content from time to time
-		self.startWorker(Configuration.get('app.csenode.intervall'), self.nodeWorker, 'nodeWorker')	
+		self.startWorker(Configuration.get('app.csenode.interval'), self.nodeWorker, 'nodeWorker')	
 		Logging.log('CSENode registered')
 
 
@@ -51,14 +53,14 @@ class CSENode(NodeBase):
 
 	# Set this node as the hosting node for the CSE Base
 	def updateCSEBase(self) -> None:
-		if (result := self.retrieveResource(ri=self.cseri))[1] != C.rcOK:
+		if (result := self.retrieveResource(ri=CSE.cseCsi)).rsc != RC.OK:
 			Logging.logErr('CSENode: cannot retrieve CSEBase')
 			return
-		jsn =	{ 'm2m:cb' : {
-					'nl' : self.node.ri
+		dct:JSON = { 'm2m:cb' : {
+						'nl' : self.node.ri
 					}
 				}
-		n, rc, _ = self.updateResource(ri=self.cseri, jsn=jsn)
+		self.updateResource(ri=CSE.cseCsi, data=dct) # ignore result
 
 
 
@@ -74,7 +76,7 @@ class CSENode(NodeBase):
 			self._checkMemory()
 			self._checkDeviceInfo()
 		except Exception as e:
-			Logging.logErr('Exception: %s' % traceback.format_exc())
+			Logging.logErr(f'Exception: {traceback.format_exc()}')
 			return False
 		return True
 
@@ -85,6 +87,7 @@ class CSENode(NodeBase):
 	#
 
 	def _checkBattery(self) -> None:
+		import psutil 	# type: ignore
 		if self.battery is not None:
 			if (sensorBat := psutil.sensors_battery()) is not None:
 				(percent, _, plugged) = sensorBat
@@ -103,6 +106,7 @@ class CSENode(NodeBase):
 
 
 	def _checkMemory(self) -> None:
+		import psutil
 		if self.memory is not None:
 			mmt = psutil.virtual_memory().total
 			mma = psutil.virtual_memory().available
@@ -115,9 +119,11 @@ class CSENode(NodeBase):
 
 	def _checkDeviceInfo(self) -> None:
 		if self.deviceInfo is not None:
-			self.deviceInfo['dvnm'] = socket.gethostname()
-			self.deviceInfo['osv'] = '%s %s %s' % (platform.system(), platform.release(), platform.machine())
-			self.deviceInfo['syst'] = Utils.getResourceDate()
-			self.deviceInfo['dlb'] = '| %s:%s %s:%s' % ('IP', socket.gethostbyname(socket.gethostname()),
-														  'MAC', ':'.join(re.findall('..', '%012x' % uuid.getnode())))
-			self.updateDeviceInfo()
+			try:
+				self.deviceInfo['dvnm'] = socket.gethostname()
+				self.deviceInfo['osv'] = f'{platform.system()} {platform.release()} {platform.machine()}'
+				self.deviceInfo['syst'] = Utils.getResourceDate()
+				self.deviceInfo['dlb'] = f'| IP:{socket.gethostbyname(socket.gethostname())} MAC:{":".join(re.findall("..", "%012x" % uuid.getnode()))}'
+				self.updateDeviceInfo()
+			except Exception as e:
+				Logging.logDebug(str(e))

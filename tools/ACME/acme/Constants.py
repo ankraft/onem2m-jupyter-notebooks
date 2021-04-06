@@ -1,5 +1,5 @@
 #
-#	Constante.py
+#	Constants.py
 #
 #	(c) 2020 by Andreas Kraft
 #	License: BSD 3-Clause License. See the LICENSE file for further details.
@@ -7,218 +7,95 @@
 #	Various CSE and oneM2M constants
 #
 
+from Types import ResourceTypes as T, ContentSerializationType as CST
+
 class Constants(object):
 
+	# ACME Version
+	version						= '0.7.3'
 
-	# Type constants
+	# Supported release vesions
+	supportedReleaseVersions = ['2a', '3', '4']
 
-	tUNKNOWN	= -1
-	tMIXED		=  0
-	tsMIXED		= 'mixed'
-	tACP 		=  1
-	tsACP 		= 'm2m:acp'
-	tAE			=  2
-	tsAE 		= 'm2m:ae'
-	tCNT		=  3
-	tsCNT		= 'm2m:cnt'
-	tCIN 		=  4
-	tsCIN 		= 'm2m:cin'
-	tCSEBase 	=  5
-	tsCSEBase	= 'm2m:cb'
-	tGRP 		=  9
-	tsGRP		= 'm2m:grp'
-	tMGMTOBJ	= 13
-	tsMGMTOBJ	= 'm2m:mgo'	# not an official shortname
-	tNOD		= 14
-	tsNOD		= 'm2m:nod'
-	tCSR		= 16
-	tsCSR 		= 'm2m:csr'
-	tSUB		= 23
-	tsSUB		= 'm2m:sub'
-	tFCNT	 	= 28
-	tsFCNT		= 'm2m:fcnt'	# not an official shortname
-	tFCI 		= 52
-	tsFCI		= 'm2m:fci'		# not an official shortname
-
-	# Virtual resources (proprietary resource types)
-
-	tCNT_OL		=  -20001
-	tsCNT_OL	= 'm2m:ol'
-	tCNT_LA		=  -20002
-	tsCNT_LA	= 'm2m:la'
-	tGRP_FOPT	=  -20003
-	tsGRP_FOPT	= 'm2m:fopt'
-	tFCNT_OL	=  -20004
-	tsFCNT_OL	= 'm2m:ol'
-	tFCNT_LA	=  -20005
-	tsFCNT_LA	= 'm2m:la'
-	tPCH_PCU	=  -20006
-	tsPCH_PCU	= 'm2m:pcu'
-
-	# <mgmtObj> Specializations
-
-	mgdFWR		= 1001
-	tsFWR		= 'm2m:fwr'
-	mgdSWR		= 1002
-	tsSWR		= 'm2m:swr'
-	mgdMEM		= 1003
-	tsMEM		= 'm2m:mem'
-	mgdANI		= 1004
-	tsANI		= 'm2m:ani'
-	mgdANDI		= 1005
-	tsANDI		= 'm2m:andi'
-	mgdBAT		= 1006
-	tsBAT		= 'm2m:bat'
-	mgdDVI 		= 1007
-	tsDVI		= 'm2m:dvi'
-	mgdDVC 		= 1008
-	tsDVC		= 'm2m:dvc'
-	mgdRBO 		= 1009
-	tsRBO		= 'm2m:rbo'
-	mgdEVL 		= 1010
-	tsEVL		= 'm2m:evl'
-
+	
 	# List of virtual resources
 
-	tVirtualResources 				= [ tCNT_LA, tCNT_OL, tFCNT_LA, tFCNT_OL, tGRP_FOPT, tPCH_PCU ]
-	tVirtualResourcesNames 			= [ 'la', 'ol', 'fopt', 'pcu' ]
+	virtualResources 				= [ T.CNT_LA, T.CNT_OL, T.FCNT_LA, T.FCNT_OL, T.GRP_FOPT, T.PCH_PCU ]
+	virtualResourcesNames 			= [ 'la', 'ol', 'fopt', 'pcu' ]
 
-	# Supported by this CSE
-	supportedResourceTypes 			= [ tACP, tAE, tCNT, tCIN, tCSEBase, tGRP, tMGMTOBJ, tNOD, tCSR, tSUB, tFCNT, tFCI ]
-	stateTagResourceTypes 			= [ tCNT, tCIN, tFCNT, tFCI ]	# those resource types allow state tags
-	supportedContentSerializations 	= [ 'application/json' ]
-	supportedContentHeaderFormat 	= [ 'application/json', 'application/vnd.onem2m-res+json' ]
-	supportedReleaseVersions 		= [ '3' ]
+	# List of announceable resource types
+	announcedResourceTypes 			= [ T.ACPAnnc, T.AEAnnc, T.CNTAnnc, T.CINAnnc, T.GRPAnnc, T.MGMTOBJAnnc, T.NODAnnc, T.CSRAnnc, T.FCNTAnnc, T.FCIAnnc ]
+
+	# Supported resource types by this CSE
+	supportedResourceTypes 			= [	# Supported normal resource
+										T.ACP, T.AE, T.CNT, T.CIN, T.CSEBase, T.GRP, T.MGMTOBJ, T.NOD, T.CSR, 
+										T.REQ, T.SUB, T.FCNT, T.FCI
+									  ]
+	supportedResourceTypes			+= announcedResourceTypes	# add announced resource types as well
+
+	stateTagResourceTypes 			= [ T.CNT, T.CIN, T.FCNT, T.FCI, T.REQ ]	# those resource types allow state tags
+	supportedContentSerializations 	= [ CST.JSON.toHeader(), CST.CBOR.toHeader(), 'application/vnd.onem2m-res+json', 'application/vnd.onem2m-res+cbor' ]
+	supportedContentSerializationsSimple = [ CST.JSON.toSimple(), CST.CBOR.toSimple() ]
+
+	supportedContentHeaderFormat 	= [ CST.JSON.toHeader(), CST.CBOR.toHeader(),'application/vnd.onem2m-res+json', 'application/vnd.onem2m-res+cbor' ]
 
 	# List of resource types for which "creator" is allowed
 	# Also add later: eventConfig, pollingChannel, statsCollect, statsConfig, semanticDescriptor,
 	# notificationTargetPolicy, timeSeries, crossResourceSubscription, backgroundDataTransfer
-	tCreatorAllowed = [ tCIN, tCNT, tGRP, tSUB, tFCNT ]
+	creatorAllowed = [ T.CIN, T.CNT, T.GRP, T.SUB, T.FCNT ]
 
 
+	#
+	#	Message Header Fields
+	#
 
-
-
-	# max length of identifiers
-	maxIDLength	= 10
-
-
-	# Response codes
-	rcOK							= 2000
-	rcCreated 						= 2001
-	rcDeleted 						= 2002
-	rcUpdated						= 2004
-	rcBadRequest					= 4000
-	rcNotFound 						= 4004
-	rcOperationNotAllowed			= 4005
-	rcContentsUnacceptable			= 4102
-	rcOriginatorHasNoPrivilege		= 4103
-	rcConflict						= 4105
-	rcSecurityAssociationRequired	= 4107
-	rcInvalidChildResourceType		= 4108
-	rcGroupMemberTypeInconsistent	= 4110
-	rcInternalServerError			= 5000
-	rcNotImplemented				= 5001
-	rcTargetNotReachable 			= 5103
-	rcReceiverHasNoPrivileges		= 5105
-	rcAlreadyExists					= 5106
-	rcTargetNotSubscribable			= 5203
-	rcSubscriptionVerificationInitiationFailed = 5204
-	rcNotAcceptable 				= 5207
-	rcMaxNumberOfMemberExceeded		= 6010
-	rcInvalidArguments				= 6023
-	rcInsufficientArguments			= 6024
-
-	# Operations
-	opRETRIEVE						= 0
-	opCREATE 						= 1
-	opUPDATE						= 2
-	opDELETE						= 3
-	opDISCOVERY						= 4
-
-
-	# Permissions
-	permNONE						=  0
-	permCREATE						=  1
-	permRETRIEVE					=  2
-	permUPDATE						=  4
-	permDELETE 						=  8
-	permNOTIFY 						= 16
-	permDISCOVERY					= 32
-	permALL							= 63
-
-
-	# CSE Types
-	cseTypeIN						=  1
-	cseTypeMN						=  2
-	cseTypeASN						=  3
-	cseTypes 						= [ '', 'IN', 'MN', 'ASN' ]
-
-
-
-	# Header Fields
 	hfOrigin						= 'X-M2M-Origin'
 	hfRI 							= 'X-M2M-RI'
 	hfRVI							= 'X-M2M-RVI'
 	hfvContentType					= 'application/json'
-	hfvRVI 							= '3'
-
-	# Subscription-related
-
-	# notificationContentTypes
-	nctAll 							= 1
-	nctModifiedAttributes			= 2
-	nctRI 							= 3
-
-	# eventNotificationCriteria/NotificationEventTypes
-	netResourceUpdate				= 1	# default
-	netResourceDelete				= 2	
-	netCreateDirectChild			= 3
-	netDeleteDirectChild			= 4	
-	netRetrieveCNTNoChild			= 5	# TODO not supported yet
-
-	# Result Content types
-	rcnNothing								= 0
-	rcnAttributes 							= 1
-	rcnHierarchicalAddress					= 2
-	rcnHierarchicalAddressAttributes		= 3
-	rcnAttributesAndChildResources			= 4	
-	rcnAttributesAndChildResourceReferences	= 5
-	rcnChildResourceReferences				= 6
-	rcnChildResources						= 8
-	rcnModifiedAttributes					= 9
-	rcnDiscoveryResultReferences			= 11
-
-	# Desired Identifier Result Type
-	drtStructured					= 1 # default
-	drtUnstructured					= 2
-
-	# Filter Usage
-	fuDiscoveryCriteria				= 1
-	fuConditionalRetrieval			= 2 # default
-	fuIPEOnDemandDiscovery			= 3
-
-	# Filter Operation
-	foAND 							= 1 # default
-	foOR 							= 2
-	foXOR 							= 3
-
-	# Group related
-
-	# consistencyStrategy
-	csyAbandonMember				= 1	# default
-	csyAbandonGroup					= 2
-	csySetMixed						= 3
+	hfEC 							= 'X-M2M-EC'
+	hfcEC 							= 'Event Category'
+	hfvECLatest 					= '4'
+	hfRET 							= 'X-M2M-RET'
+	hfRST 							= 'X-M2M-RST'
+	hfOET 							= 'X-M2M-OET'
+	hfRTU 							= 'X-M2M-RTU'
+	hfAccept						= 'Accept'
+			
 
 	#
-	#	Magic strings
+	#	Supported URL schemes
+	#
+	supportedSchemes = ['http', 'https']	# Supported by the CSE
+	# TODO add Coap here later
+
+	#
+	#	Supported content serializations
 	#
 
-	# Additional JSON fields
-	jsnIsImported						= '__imported__'
+	#
+	#	Configuration meta defaults
+	#
 
-	acpPrefix 						= 'acp_'
+	defaultConfigFile			= 'acme.ini'
+	defaultImportDirectory		= './init'
+	defaultDataDirectory		= './data'
+	defaultLogDirectory			= './logs'
 
+	#
+	#	Magic strings and numbers
+	#
+
+	# Additional internal resource fields
+	isImported					= '__imported__'
+
+	acpPrefix 					= 'acp_'
+
+	invalidValue 				= '__iNvAliD___'
+
+
+	# max length of identifiers
+	maxIDLength	= 10
 
 
 	

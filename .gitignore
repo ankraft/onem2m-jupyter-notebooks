@@ -1,3 +1,7 @@
 __pycache__/
+.mypy_cache/
 .ipynb_checkpoints/
 .python-version
+
+.DS_Store
+

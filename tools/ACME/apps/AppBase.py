@@ -8,14 +8,16 @@
 #	many utility methods like registering with the CSE etc.
 #
 
-import json, os
-from typing import Optional, Tuple, Dict, Any, Callable
+import os
+from typing import Dict, Any, Callable
 from Configuration import Configuration
 from resources.Resource import Resource
 from Logging import Logging
 from Constants import Constants as C
-import CSE, Utils
-from helpers.BackgroundWorker import BackgroundWorker
+from Types import ResourceTypes as T, Result, ResponseCode as RC, JSON
+import CSE
+from helpers.BackgroundWorker import BackgroundWorkerPool, BackgroundWorker
+import resources.Factory as Factory
 
 
 class AppBase(object):
@@ -24,11 +26,11 @@ class AppBase(object):
 	def __init__(self, rn: str, originator: str) -> None:
 		self.rn:str 					= rn
 		self.originator:str				= originator
-		self.cseri:str					= Configuration.get('cse.ri')
-		self.csern:str					= Configuration.get('cse.rn')
+		self.cseCsi						= CSE.cseCsi
+		self.csern:str					= CSE.cseRn
 		self.srn:str 					= self.csern + '/' + self.rn
 		self.url:str					= Configuration.get('http.address') + Configuration.get('http.root')
-		self.worker:BackgroundWorker	= None
+		self.worker:BackgroundWorker 	= None
 		
 
 	def shutdown(self) -> None:
@@ -40,51 +42,52 @@ class AppBase(object):
 	#	Requests
 	#
 
-	def retrieveResource(self, ri: str = None, srn:str = None) -> Tuple[dict, int, str]:
-		return CSE.httpServer.sendRetrieveRequest(self._id(ri, srn), self.originator)
+	def retrieveResource(self, ri:str=None, srn:str=None) -> Result:
+		return CSE.request.sendRetrieveRequest(self._id(ri, srn), self.originator)
 
 
-	def createResource(self, ri:str = None, srn:str = None, ty:int = None, jsn:Dict[str, Any] = None) -> Tuple[dict, int, str]:
-		return CSE.httpServer.sendCreateRequest(self._id(ri, srn), self.originator, ty, json.dumps(jsn))
+	def createResource(self, ri:str=None, srn:str=None, ty:T=None, data:Dict[str, Any]=None) -> Result:
+		return CSE.request.sendCreateRequest(self._id(ri, srn), self.originator, ty, data)
 
 
-	def updateResource(self, ri: str = None, srn: str = None, jsn: dict = None) -> Tuple[dict, int, str]:
-		return CSE.httpServer.sendUpdateRequest(self._id(ri, srn), self.originator, json.dumps(jsn))
+	def updateResource(self, ri:str=None, srn:str=None, data:JSON=None) -> Result:
+		return CSE.request.sendUpdateRequest(self._id(ri, srn), self.originator, data)
 
 
-	def deleteResource(self, ri: str = None, srn: str = None) -> Tuple[dict, int, str]:
-		return CSE.httpServer.sendDeleteRequest(self._id(ri, srn), self.originator)
+	def deleteResource(self, ri:str=None, srn:str=None) -> Result:
+		return CSE.request.sendDeleteRequest(self._id(ri, srn), self.originator)
 
 
 	def _id(self, ri: str, srn: str) -> str:
 		if ri is not None:
 			return self.url + '/' + ri
-			# return self.url + self.cseri + '/' + ri
 		elif srn is not None:
 			return self.url + '/' + srn
 		return None
 
 
-	def retrieveCreate(self, srn : str = None, jsn: dict = None, ty:int = C.tMGMTOBJ) -> Resource:
+	def retrieveCreate(self, srn:str=None, data:JSON=None, ty:T=T.MGMTOBJ) -> Resource:
 		# First check whether node exists and create it if necessary
-		if (result := self.retrieveResource(srn=srn))[1] != C.rcOK:
+		if (result := self.retrieveResource(srn=srn)).rsc != RC.OK:
 
 			# No, so create mgmtObj specialization
 			srn = os.path.split(srn)[0] if srn.count('/') >= 0 else ''
-			n, rc, msg = self.createResource(srn=srn, ty=ty, jsn=jsn)
-			if n is not None:
-				return Utils.resourceFromJSON(n)[0]
+			result = self.createResource(srn=srn, ty=ty, data=data)
+			if result.rsc == RC.created:
+				return Factory.resourceFromDict(result.dict).resource	# type:ignore[no-any-return]
+			else:
+				#Logging.logErr(n)
+				pass
 		else: # just retrieve
-			return Utils.resourceFromJSON(result[0])[0]
+			return Factory.resourceFromDict(result.dict).resource		# type:ignore[no-any-return]
 		return None
 
 
 	#########################################################################
 
-	def startWorker(self, updateInterval: float, worker: Callable, name: str = None) -> None:
+	def startWorker(self, updateInterval:float, worker:Callable, name:str=None) -> None:	# type:ignore[type-arg]
 		self.stopWorker()
-		self.worker = BackgroundWorker(updateInterval, worker, name)
-		self.worker.start()
+		self.worker = BackgroundWorkerPool.newWorker(updateInterval, worker, name).start()
 
 
 	def stopWorker(self) -> None:

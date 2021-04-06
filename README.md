@@ -7,7 +7,9 @@ This repository contains a number of [Jupyter Notebooks](https://jupyter.org) th
 - [Using the Notebooks](#using)  
 
 
-[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/ankraft/onem2m-jupyter-notebooks/development)
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/ankraft/onem2m-jupyter-notebooks/master?filepath=__START__.ipynb)
+[![Twitter](https://img.shields.io/twitter/url/https/twitter.com/acmeCSE.svg?style=social&label=%40acmeCSE)](https://twitter.com/acmeCSE)
+
 
 
 <a name="installation"></a>
@@ -101,7 +103,7 @@ How do you search for resources in a CSE?.
 Group resources together and send requests to a group instead of each single resource.
 - [onem2m-05-accesscontrol.ipynb](onem2m-05-accesscontrol.ipynb)  
 Control access to resources with Access Control Policies.
-- [onem2m-06-notifications.ipynb](onem2m-06a-notifications.ipynb)  
+- [onem2m-06-notifications.ipynb](onem2m-06-notifications.ipynb)  
 Subscribe to changes of resources and receive notifications.
 - [onem2m-07-flexcontainer.ipynb](onem2m-07-flexcontainer.ipynb)  
 What are &lt;FlexContainer> resources and how to use them?

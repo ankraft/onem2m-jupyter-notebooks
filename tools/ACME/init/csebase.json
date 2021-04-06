@@ -1,0 +1,8 @@
+{	"m2m:cb" : {
+		"ty" : 5,
+		"ri" : "${cse.ri}",
+		"rn" : "${cse.rn}",
+		"csi" : "${cse.csi}",
+		"csz" : [ "application/json", "application/cbor" ]
+	}
+}

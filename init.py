@@ -23,9 +23,16 @@ def printmd(s, c=None):
 def printmdCode(s):
     lines = s.split('\n')
     result = ''
+    # for l in lines:
+    #     stripped = l.lstrip()
+    #     result += '&nbsp;' * (len(l) - len(stripped)) + stripped + '  \n'
     for l in lines:
-        stripped = l.lstrip()
-        result += '&nbsp;' * (len(l) - len(stripped)) + stripped + '  \n' 
+        l = l.rstrip()          # Remove all ws from the end
+        stripped = l.lstrip()   # Return a version where all ws is removed from the beginning
+        li = "<span style='font-family: monospace;'>" +'&nbsp;' * (len(l) - len(stripped)) + stripped + '</span>  \n' 
+        li = li.replace('   ', '&nbsp;&nbsp;&nbsp;') # replace all 3*space in the middle
+        result += li.replace('\x03', '\n')  # Replace possible \x03 marker with newlines, e.g. in annotations
+
     IPython.display.display(IPython.display.Markdown(result))
 
 # Format and print JSON
@@ -100,7 +107,7 @@ def queryNotificationServer():
     lastRunTS = time.time()
     printmd('**Waiting for notifications**', c='green')
     while True:
-        result = requests.get(nu() + '?ts=' + str(lastRunTS))
+        result = requests.get(notificationURL + '?ts=' + str(lastRunTS))
         lastRunTS = time.time()
         if result.text:
             printmd('### Received Notification - ' + str(datetime.datetime.now()))
@@ -125,10 +132,6 @@ def ae():
 
 def acp():
     return 'Notebook-ACP'
-
-def nu():
-    return notificationURLBase + ':' + str(notificationPort)
-
 
 
 

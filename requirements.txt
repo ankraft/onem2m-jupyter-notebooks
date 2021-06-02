@@ -71,7 +71,7 @@ tinydb==4.4.0             # via oneM2M-jupyter-notebooks (setup.py)
 tornado==6.1              # via ipykernel, jupyter-client, notebook, terminado
 traitlets==5.0.5          # via ipykernel, ipython, ipywidgets, jupyter-client, jupyter-core, nbclient, nbconvert, nbformat, notebook, qtconsole
 typing-extensions==3.7.4.3  # via rich
-urllib3==1.26.4           # via requests
+urllib3==1.26.5           # via requests
 wcwidth==0.2.5            # via prompt-toolkit
 webencodings==0.5.1       # via bleach
 werkzeug==1.0.1           # via flask

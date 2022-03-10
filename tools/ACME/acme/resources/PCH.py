@@ -7,56 +7,68 @@
 #	ResourceType: PollingChannel
 #
 
-from Constants import Constants as C
-from Types import ResourceTypes as T, Result, JSON
-from Validator import constructPolicy, addPolicy
-import Utils, CSE
-from Logging import Logging
-from .Resource import *
-from .AnnounceableResource import AnnounceableResource
-import resources.Factory as Factory
-
-
-
-
-# Attribute policies for this resource are constructed during startup of the CSE
-attributePolicies = constructPolicy([ 
-	'ty', 'ri', 'rn', 'pi', 'acpi', 'ct', 'lt', 'et', 'lbl', 'daci', 
-])
-pchPolicies = constructPolicy([
-	# No own attributes
-])
-attributePolicies = addPolicy(attributePolicies, pchPolicies)
+from __future__ import annotations
+from typing import Any
+from ..etc.Types import AttributePolicyDict, ContentSerializationType, Operation, RequestType, ResourceTypes as T, Result, JSON, Parameters
+from ..etc import RequestUtils as RU
+from ..resources.Resource import *
+from ..resources import Factory as Factory
+from ..services import CSE as CSE
+from ..services.Logging import Logging as L
 
 
 class PCH(Resource):
 
+	# Specify the allowed child-resource types
+	_allowedChildResourceTypes = [ T.PCH_PCU ]
+
+	# Attributes and Attribute policies for this Resource Class
+	# Assigned during startup in the Importer
+	_attributes:AttributePolicyDict = {		
+		# Common and universal attributes
+		'rn': None,
+		'ty': None,
+		'ri': None,
+		'pi': None,
+		'ct': None,
+		'lt': None,
+		'et': None,
+		'lbl': None,
+
+		# Resource attributes
+
+		# TODO requestAggregation attribute as soon as it has been specified in TS-0004
+
+	}
+
+
 	def __init__(self, dct:JSON=None, pi:str=None, create:bool=False) -> None:
-		super().__init__(T.PCH, dct, pi, create=create, attributePolicies=attributePolicies)
-		self.resourceAttributePolicies = pchPolicies	# only the resource type's own policies
+		# PCH inherits from its parent, the <AE>
+		super().__init__(T.PCH, dct, pi, create=create, inheritACP=True)
 
 
-	# Enable check for allowed sub-resources
-	def canHaveChild(self, resource:Resource) -> bool:
-		return super()._canHaveChild(resource, [ T.PCH_PCU ])
-
-
-# TODO test Retrieve by AE only! Add new willBeRetrieved() function
+# TODO test Retrieve by originator AE only! Add new willBeRetrieved() function
 # TODO continue with 10.2.5.14 Retrieve <pollingChannel>
+
 
 	def activate(self, parentResource:Resource, originator:str) -> Result:
 		if not (res := super().activate(parentResource, originator)).status:
 			return res
 
 		# NOTE Check for uniqueness is done in <AE>.childWillBeAdded()
-		# TODO the same for CSR
-			
 		
 		# register pollingChannelURI virtual resource
-		Logging.logDebug(f'Registering <PCU> for: {self.ri}')
-		pcu = Factory.resourceFromDict(pi=self.ri, ty=T.PCH_PCU).resource	# rn is assigned by resource itself
-		if (res := CSE.dispatcher.createResource(pcu)).resource is None:
+		if L.isDebug: L.logDebug(f'Registering <PCU> for: {self.ri}')
+		dct = {
+			'm2m:pcu' : {
+				'rn' : 'pcu'
+			}
+		}
+		pcu = Factory.resourceFromDict(dct, pi=self.ri, ty=T.PCH_PCU).resource	# rn is assigned by resource itself
+		if not (res := CSE.dispatcher.createResource(pcu, originator=originator)).resource:
 			return Result(status=False, rsc=res.rsc, dbg=res.dbg)
+		
 
 		return Result(status=True)
+
 

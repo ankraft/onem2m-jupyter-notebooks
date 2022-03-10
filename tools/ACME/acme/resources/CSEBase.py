@@ -7,75 +7,114 @@
 #	ResourceType: CSEBase
 #
 
-from Constants import Constants as C
-from Types import ResourceTypes as T, Result, JSON
-from Configuration import Configuration
-from Validator import constructPolicy
-from .Resource import *
-import CSE
+from __future__ import annotations
+from urllib import request
+from ..etc.Types import AttributePolicyDict, CSERequest, ResourceTypes as T, ContentSerializationType as CST, Result, JSON
+from ..etc import Utils
+from ..resources.Resource import Resource
+from ..resources.AnnounceableResource import AnnounceableResource
+from ..services import CSE
+from ..services.Logging import Logging as L
+
+# TODO notificationCongestionPolicy
+
+class CSEBase(AnnounceableResource):
+
+	# Specify the allowed child-resource types
+	_allowedChildResourceTypes = [ T.ACP, T.ACTR, T.AE, T.CSR, T.CNT, T.FCNT, T.GRP, T.NOD, T.REQ, T.SUB, T.TS, T.TSB, T.CSEBaseAnnc ]
+
+	# Attributes and Attribute policies for this Resource Class
+	# Assigned during startup in the Importer
+	_attributes:AttributePolicyDict = {		
+			# Common and universal attributes
+			'rn': None,
+		 	'ty': None,
+			'ri': None,
+			'pi': None,
+			'ct': None,
+			'lt': None,
+			'lbl': None,
+			'loc': None,	
+			'cstn': None,
+			'acpi': None,
+
+			# Resource attributes
+			'poa': None,
+			'nl': None,
+			'daci': None,
+			'esi': None,
+			'srv': None,
+			'cst': None,
+			'csi': None,
+			'csz': None
+	}
 
 
-# Attribute policies for this resource are constructed during startup of the CSE
-attributePolicies = constructPolicy([ 
-	'rn', 'ty', 'ri', 'pi',  'ct', 'lt', 'lbl', 'loc', 'hld',
-	'acpi', 'poa', 'nl', 'daci', 'esi', 'srv', 'cst', 'csi', 'csz'
-])
+	def __init__(self, dct:JSON = None, create:bool = False) -> None:
+		super().__init__(T.CSEBase, dct, '', create = create)
 
-class CSEBase(Resource):
+		self.setAttribute('ri', 'cseid', overwrite = False)
+		self.setAttribute('rn', 'cse', overwrite = False)
+		self.setAttribute('csi', '/cse', overwrite = False)
 
-	def __init__(self, dct:JSON=None, create:bool=False) -> None:
-		super().__init__(T.CSEBase, dct, '', create=create, attributePolicies=attributePolicies)
+		self.setAttribute('rr', False, overwrite = False)
+		self.setAttribute('srt', T.supportedResourceTypes(), overwrite = False)			#  type: ignore
+		self.setAttribute('csz', CST.supportedContentSerializations(), overwrite = False)	# Will be replaced when retrieved
+		self.setAttribute('srv', CSE.supportedReleaseVersions, overwrite = False)			# This must be a list
+		self.setAttribute('poa', [ CSE.httpServer.serverAddress ], overwrite = False)		# TODO add more address schemes when available
+		self.setAttribute('cst', CSE.cseType, overwrite = False)
 
-		if self.dict is not None:
-			self.setAttribute('ri', 'cseid', overwrite=False)
-			self.setAttribute('rn', 'cse', overwrite=False)
-			self.setAttribute('csi', 'cse', overwrite=False)
-
-			self.setAttribute('rr', False, overwrite=False)
-			self.setAttribute('srt', C.supportedResourceTypes, overwrite=False)
-			self.setAttribute('csz', C.supportedContentSerializations, overwrite=False)
-			self.setAttribute('srv', CSE.supportedReleaseVersions, overwrite=False)	# This must be a list
-			self.setAttribute('poa', [ CSE.httpServer.serverAddress ], overwrite=False)		# TODO add more address schemes when available
-			self.setAttribute('cst', CSE.cseType, overwrite=False)
+		# remove the et attribute that was set by the parent. The CSEBase doesn't have one	
+		self.delAttribute('et', setNone = False)	
 
 
-	# Enable check for allowed sub-resources
-	def canHaveChild(self, resource:Resource) -> bool:
-		return super()._canHaveChild(resource,	
-									 [ T.ACP,
-									   T.AE,
-									   T.CSR, 
-									   T.CNT,
-									   T.FCNT,
-									   T.GRP,
-									   T.NOD,
-									   T.REQ,
-									   T.SUB
-									 ])
-
-
-	def validate(self, originator:str=None, create:bool=False, dct:JSON=None) -> Result:
-		if not (res := super().validate(originator, create, dct)).status:
+	def activate(self, parentResource:Resource, originator:str) -> Result:
+		if not (res := super().activate(parentResource, originator)).status:
 			return res
 		
-		self.normalizeURIAttribute('poa')
+		if not Utils.isValidCSI(self.csi):
+			L.logWarn(dbg := f'Wrong format for CSEBase.csi: {self.csi}')
+			return Result(status = False, dbg = dbg)
+
+		return Result(status =True)
+
+
+	def validate(self, originator:str = None, create:bool = False, dct:JSON = None, parentResource:Resource = None) -> Result:
+		if not (res := super().validate(originator, create, dct, parentResource)).status:
+			return res
+		
+		self._normalizeURIAttribute('poa')
 
 		# Update the hcl attribute in the hosting node (similar to AE)
 		nl = self['nl']
 		_nl_ = self.__node__
 
-		if nl is not None or _nl_ is not None:
+		if nl or _nl_:
 			if nl != _nl_:
-				if _nl_ is not None:
-					nresource = CSE.dispatcher.retrieveResource(_nl_).resource
-					if nresource is not None:
+				if _nl_:
+					if nresource := CSE.dispatcher.retrieveResource(_nl_).resource:
 						nresource['hcl'] = None # remove old link
 						CSE.dispatcher.updateResource(nresource)
 				self[Resource._node] = nl
-				nresource = CSE.dispatcher.retrieveResource(nl)
-				if nresource is not None:
+				if nresource := CSE.dispatcher.retrieveResource(nl).resource:
 					nresource['hcl'] = self['ri']
 					CSE.dispatcher.updateResource(nresource)
 			self[Resource._node] = nl
 
-		return Result(status=True)
+		return Result(status = True)
+
+
+	def willBeRetrieved(self, originator:str, request:CSERequest, subCheck:bool = True) -> Result:
+		if not (res := super().willBeRetrieved(originator, request, subCheck = subCheck)).status:
+			return res
+
+		# add the current time to this resource instance
+		self['ctm'] = CSE.time.getCSETimestamp()
+
+		# add the supported release versions
+		self['srv'] = CSE.supportedReleaseVersions
+
+		return Result(status = True)
+
+
+		

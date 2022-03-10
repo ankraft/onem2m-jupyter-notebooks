@@ -7,62 +7,94 @@
 #	ResourceType: RemoteCSE
 #
 
-from Constants import Constants as C
-from Types import ResourceTypes as T, Result, JSON
-from Configuration import Configuration
-from Validator import constructPolicy, addPolicy
-from .Resource import *
-from .AnnounceableResource import AnnounceableResource
-
-# Attribute policies for this resource are constructed during startup of the CSE
-attributePolicies = constructPolicy([ 
-	'ty', 'ri', 'rn', 'pi', 'acpi', 'ct', 'lt', 'et', 'lbl', 'at', 'aa', 'cr', 'daci', 'loc', 'hld'
-])
-csrPolicies = constructPolicy([
-	'cst', 'poa', 'cb', 'csi', 'mei', 'tri', 'rr', 'nl', 'csz', 'esi', 'trn', 'dcse', 'mtcc', 'egid', 'tren', 'ape', 'srv'
-])
-attributePolicies = addPolicy(attributePolicies, csrPolicies)
-
-# TODO ^^^ Add Attribute EnableTimeCompensation, also in CSRAnnc
+from ..etc.Types import AttributePolicyDict, ResourceTypes as T, Result, JSON
+from ..resources.Resource import *
+from ..resources.AnnounceableResource import AnnounceableResource
 
 
 class CSR(AnnounceableResource):
 
-	def __init__(self, dct:JSON=None, pi:str=None, rn:str=None, create:bool=False) -> None:
-		super().__init__(T.CSR, dct, pi, rn=rn, create=create, attributePolicies=attributePolicies)
-
-		self.resourceAttributePolicies = csrPolicies	# only the resource type's own policies
-
-		if self.dict is not None:
-			self.setAttribute('csi', 'cse', overwrite=False)	# This shouldn't happen
-			self['ri'] = self.csi.split('/')[-1]				# overwrite ri (only after /'s')
-			self.setAttribute('rr', False, overwrite=False)
+	# Specify the allowed child-resource types
+	_allowedChildResourceTypes = [	T.ACP, T.ACPAnnc, T.ACTR, T.ACTRAnnc, T.AEAnnc, T.CNT, T.CNTAnnc, 
+									T.CINAnnc, T.CSRAnnc, T.FCNT, T.FCNTAnnc, T.FCI, T.GRP, T.GRPAnnc, 
+									T.MGMTOBJAnnc, T.NODAnnc, T.PCH, T.SUB, T.TS, T.TSAnnc, T.TSB ]
 
 
-	# Enable check for allowed sub-resources
-	def canHaveChild(self, resource:Resource) -> bool:
-		return super()._canHaveChild(resource,
-									 [ T.CNT,
-									   T.CNTAnnc,
-									   T.CINAnnc,
-									   T.FCNT,
-									   T.FCNTAnnc,
-									   T.FCI,
-									   T.FCIAnnc,
-									   T.GRP,
-									   T.GRPAnnc,
-									   T.ACP,
-									   T.ACPAnnc,
-									   T.SUB,
-									   T.CSRAnnc,
-									   T.MGMTOBJAnnc,
-									   T.NODAnnc,
-									   T.AEAnnc
-									 ])
+	# Attributes and Attribute policies for this Resource Class
+	# Assigned during startup in the Importer
+	_attributes:AttributePolicyDict = {		
+			# Common and universal attributes
+			'rn': None,
+		 	'ty': None,
+			'ri': None,
+			'pi': None,
+			'ct': None,
+			'lt': None,
+			'et': None,
+			'lbl': None,
+			'cstn': None,
+			'acpi':None,
+			'daci': None,
+			'at': None,
+			'aa': None,
+			'ast': None,
+			'cr': None,
+			'loc': None,
+
+			# Resource attributes
+			'cst': None,
+			'poa': None,
+			'cb': None,
+			'csi': None,
+			'mei': None,
+			'tri': None,
+			'rr': None,
+			'nl': None,
+			'csz': None,
+			'esi': None,
+			'trn': None,
+			'dcse': None,
+			'mtcc': None,
+			'egid': None,
+			'tren': None,
+			'ape': None,
+			'srv': None
+	}
+
+	# TODO ^^^ Add Attribute EnableTimeCompensation, also in CSRAnnc
+	
+
+	def __init__(self, dct:JSON=None, pi:str = None, rn:str = None, create:bool = False) -> None:
+		super().__init__(T.CSR, dct, pi, rn = rn, create=create)
+
+		#self.setAttribute('csi', 'cse', overwrite=False)	# This shouldn't happen
+		if self.csi:
+			# self.setAttribute('ri', self.csi.split('/')[-1])				# overwrite ri (only after /'s')
+			self.setAttribute('ri', Utils.getIdFromOriginator(self.csi))	# overwrite ri (only after /'s')
+		self.setAttribute('rr', False, overwrite=False)
 
 
-	def validate(self, originator:str=None, create:bool=False, dct:JSON=None) -> Result:
-		if (res := super().validate(originator, create, dct)).status == False:
+	def childWillBeAdded(self, childResource:Resource, originator:str) -> Result:
+		if not (res := super().childWillBeAdded(childResource, originator)).status:
 			return res
-		self.normalizeURIAttribute('poa')
+
+		# Perform checks for <PCH>	
+		if childResource.ty == T.PCH:
+			# Check correct originator. Even the ADMIN is not allowed that		
+			if self.csi != originator:
+				L.logDebug(dbg := f'Originator must be the parent <CSR>')
+				return Result(status = False, rsc = RC.originatorHasNoPrivilege, dbg = dbg)
+
+			# check that there will only by one PCH as a child
+			if CSE.dispatcher.countDirectChildResources(self.ri, ty=T.PCH) > 0:
+				L.logDebug(dbg := 'Only one <PCH> per <CSR> is allowed')
+				return Result(status = False, rsc = RC.badRequest, dbg = dbg)
+
+		return Result(status=True)
+
+
+	def validate(self, originator:str = None, create:bool = False, dct:JSON = None, parentResource:Resource = None) -> Result:
+		if (res := super().validate(originator, create, dct, parentResource)).status == False:
+			return res
+		self._normalizeURIAttribute('poa')
 		return Result(status=True)

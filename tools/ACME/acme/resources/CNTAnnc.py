@@ -8,38 +8,43 @@
 #
 
 
-from .AnnouncedResource import AnnouncedResource
-from .Resource import *
-from Types import ResourceTypes as T, JSON
-from Validator import constructPolicy, addPolicy
-
-# Attribute policies for this resource are constructed during startup of the CSE
-attributePolicies = constructPolicy([ 
-	'et', 'acpi', 'lbl','daci', 'loc',
-	'lnk'
-])
-cntAPolicies = constructPolicy([
-	'mni', 'mbs', 'mia', 'li', 'or', 'disr'
-])
-attributePolicies =  addPolicy(attributePolicies, cntAPolicies)
-# TODO announceSyncType
+from ..etc.Types import AttributePolicyDict, ResourceTypes as T, JSON
+from ..resources.AnnouncedResource import AnnouncedResource
 
 
 class CNTAnnc(AnnouncedResource):
 
+	# Specify the allowed child-resource types
+	_allowedChildResourceTypes = [ T.ACTR, T.ACTRAnnc, T.CNT, T.CNTAnnc, T.CIN, T.CINAnnc, T.FCNT, T.FCNTAnnc, T.SUB, T.TS, T.TSAnnc ]
+
+	# Attributes and Attribute policies for this Resource Class
+	# Assigned during startup in the Importer
+	_attributes:AttributePolicyDict = {		
+		# Common and universal attributes for announced resources
+		'rn': None,
+		'ty': None,
+		'ri': None,
+		'pi': None,
+		'ct': None,
+		'lt': None,
+		'et': None,
+		'lbl': None,
+		'acpi':None,
+		'daci': None,
+		'ast': None,
+		'loc': None,
+		'lnk': None,
+
+		# Resource attributes
+		'mni': None,
+		'mbs': None,
+		'mia': None,
+		'li': None,
+		'or': None,
+		'disr': None
+	}
+
+
 	def __init__(self, dct:JSON=None, pi:str=None, create:bool=False) -> None:
-		super().__init__(T.CNTAnnc, dct, pi=pi, create=create, attributePolicies=attributePolicies)
-
-
-	# Enable check for allowed sub-resources
-	def canHaveChild(self, resource:Resource) -> bool:
-		return super()._canHaveChild(resource,	
-									 [ T.CNT,
-									   T.CNTAnnc,
-									   T.CIN,
-									   T.CINAnnc,
-									   T.FCNT,
-									   T.FCNTAnnc,
-									   T.SUB
-									 ])
+		super().__init__(T.CNTAnnc, dct, pi=pi, create=create)
 

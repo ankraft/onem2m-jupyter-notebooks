@@ -7,17 +7,8 @@
 #	ResourceType: mgmtObj:EventLog
 #
 
-from .MgmtObj import *
-from Types import ResourceTypes as T, JSON
-from Validator import constructPolicy, addPolicy
-import Utils
-
-# Attribute policies for this resource are constructed during startup of the CSE
-evlPolicies = constructPolicy([
-	'lgt', 'lgd', 'lgst', 'lga', 'lgo'
-])
-attributePolicies = addPolicy(mgmtObjAttributePolicies, evlPolicies)
-
+from ..etc.Types import AttributePolicyDict, ResourceTypes as T, JSON
+from ..resources.MgmtObj import *
 
 lgtSystem = 1
 lgtSecurity	= 2
@@ -37,14 +28,48 @@ defaultLogStatus = lgstUnknown
 
 class EVL(MgmtObj):
 
-	def __init__(self, dct:JSON=None, pi:str=None, create:bool=False) -> None:
-		self.resourceAttributePolicies = evlPolicies	# only the resource type's own policies
-		super().__init__(dct, pi, mgd=T.EVL, create=create, attributePolicies=attributePolicies)
+	# Attributes and Attribute policies for this Resource Class
+	# Assigned during startup in the Importer
+	_attributes:AttributePolicyDict = {		
+		# Common and universal attributes
+		'rn': None,
+		'ty': None,
+		'ri': None,
+		'pi': None,
+		'ct': None,
+		'lt': None,
+		'et': None,
+		'lbl': None,
+		'cstn': None,
+		'acpi':None,
+		'at': None,
+		'aa': None,
+		'ast': None,
+		'daci': None,
+		
+		# MgmtObj attributes
+		'mgd': None,
+		'obis': None,
+		'obps': None,
+		'dc': None,
+		'mgs': None,
+		'cmlk': None,
 
-		if self.dict is not None:
-			self.setAttribute('lgt', defaultLogTypeId, overwrite=False)
-			self.setAttribute('lgd', '', overwrite=False)
-			self.setAttribute('lgst', defaultLogStatus, overwrite=False)
-			self.setAttribute('lga', False, overwrite=False)
-			self.setAttribute('lgo', False, overwrite=False)
+		# Resource attributes
+		'lgt': None,
+		'lgd': None,
+		'lgst': None,
+		'lga': None,
+		'lgo': None
+	}
+	
+
+	def __init__(self, dct:JSON=None, pi:str=None, create:bool=False) -> None:
+		super().__init__(dct, pi, mgd=T.EVL, create=create)
+
+		self.setAttribute('lgt', defaultLogTypeId, overwrite=False)
+		self.setAttribute('lgd', '', overwrite=False)
+		self.setAttribute('lgst', defaultLogStatus, overwrite=False)
+		self.setAttribute('lga', False, overwrite=False)
+		self.setAttribute('lgo', False, overwrite=False)
 

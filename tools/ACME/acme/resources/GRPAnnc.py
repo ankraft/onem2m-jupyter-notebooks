@@ -8,34 +8,48 @@
 #
 
 
-from .AnnouncedResource import AnnouncedResource
-from .Resource import *
-from Types import ResourceTypes as T, JSON
-from Validator import constructPolicy, addPolicy
-
-# Attribute policies for this resource are constructed during startup of the CSE
-attributePolicies = constructPolicy([ 
-	'et', 'acpi', 'lbl','daci', 'loc',
-	'lnk' 
-])
-grpAPolicies = constructPolicy([
-	'mt', 'spty', 'cnm', 'mnm', 'mid', 'macp', 'mtv', 'csy', 'gn', 'ssi', 'nar'
-])
-attributePolicies =  addPolicy(attributePolicies, grpAPolicies)
-# TODO announceSyncType, somecastEnable, somecastAlgorithm
+from ..etc.Types import AttributePolicyDict, ResourceTypes as T, JSON
+from ..resources.AnnouncedResource import AnnouncedResource
+from ..resources.Resource import *
 
 
 class GRPAnnc(AnnouncedResource):
 
+	# Specify the allowed child-resource types
+	_allowedChildResourceTypes = [ T.ACTR, T.ACTRAnnc, T.SUB ]
+
+	# Attributes and Attribute policies for this Resource Class
+	# Assigned during startup in the Importer
+	_attributes:AttributePolicyDict = {		
+		# Common and universal attributes for announced resources
+		'rn': None,
+		'ty': None,
+		'ri': None,
+		'pi': None,
+		'ct': None,
+		'lt': None,
+		'et': None,
+		'lbl': None,
+		'acpi':None,
+		'daci': None,
+		'ast': None,
+		'loc': None,
+		'lnk': None,
+
+		# Resource attributes
+		'mt': None,
+		'spty': None,
+		'cnm': None,
+		'mnm': None,
+		'mid': None,
+		'macp': None,
+		'mtv': None,
+		'csy': None,
+		'gn': None,
+		'ssi': None,
+		'nar': None
+	}
+
 	def __init__(self, dct:JSON=None, pi:str=None, create:bool=False) -> None:
-		super().__init__(T.GRPAnnc, dct, pi=pi, create=create, attributePolicies=attributePolicies)
-
-
-	# Enable check for allowed sub-resources
-	def canHaveChild(self, resource: Resource) -> bool:
-		return super()._canHaveChild(resource,	
-									 [ T.SUB
-									 ])
-
-		 
+		super().__init__(T.GRPAnnc, dct, pi=pi, create=create)
 

@@ -7,25 +7,48 @@
 #	ResourceType: mgmtObj:areaNwkInfo
 #
 
-from .MgmtObj import *
-from Types import ResourceTypes as T, JSON
-from Validator import constructPolicy, addPolicy
-import Utils
-
-# Attribute policies for this resource are constructed during startup of the CSE
-aniPolicies = constructPolicy([
-	'ant', 'ldv'
-])
-attributePolicies =  addPolicy(mgmtObjAttributePolicies, aniPolicies)
+from ..etc.Types import AttributePolicyDict, ResourceTypes as T, JSON
+from ..resources.MgmtObj import *
 
 defaultAreaNwkType = ''
 
 
 class ANI(MgmtObj):
+	
+	# Attributes and Attribute policies for this Resource Class
+	# Assigned during startup in the Importer
+	_attributes:AttributePolicyDict = {		
+			# Common and universal attributes
+			'rn': None,
+		 	'ty': None,
+			'ri': None,
+			'pi': None,
+			'ct': None,
+			'lt': None,
+			'et': None,
+			'lbl': None,
+			'cstn': None,
+			'acpi':None,
+			'at': None,
+			'aa': None,
+			'ast': None,
+			'daci': None,
+			
+			# MgmtObj attributes
+			'mgd': None,
+			'obis': None,
+			'obps': None,
+			'dc': None,
+			'mgs': None,
+			'cmlk': None,
+
+			# Resource attributes
+			'ant': None,
+			'ldv': None
+	}
+	
 
 	def __init__(self, dct:JSON=None, pi:str=None, create:bool=False) -> None:
-		self.resourceAttributePolicies = aniPolicies	# only the resource type's own policies
-		super().__init__(dct, pi, mgd=T.ANI, create=create, attributePolicies=attributePolicies)
+		super().__init__(dct, pi, mgd=T.ANI, create=create)
 
-		if self.dict is not None:
-			self.setAttribute('ant', defaultAreaNwkType, overwrite=False)
+		self.setAttribute('ant', defaultAreaNwkType, overwrite=False)

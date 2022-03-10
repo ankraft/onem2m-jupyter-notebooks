@@ -1,0 +1,13 @@
+@startuml
+hide footbox
+!theme plain
+skinparam backgroundcolor transparent
+
+participant "Notebook\nAE" as AE 
+participant "CSE" as CSE 
+
+AE -> CSE: RETRIEVE <contentInstance>\ncse-in/Notebook-AE/Container\nlbl=..., child resource
+CSE --> CSE: Collect\nresources
+AE <- CSE: Response
+
+@enduml

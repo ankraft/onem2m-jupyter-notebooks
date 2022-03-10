@@ -1,0 +1,11 @@
+@startuml
+hide footbox
+!theme plain
+
+participant "Notebook\nAE" as AE 
+participant "CSE" as CSE 
+
+AE -> CSE: RETRIEVE\ncse-in
+AE <- CSE: Response
+
+@enduml

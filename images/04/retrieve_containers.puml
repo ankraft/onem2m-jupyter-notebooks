@@ -1,0 +1,13 @@
+@startuml
+hide footbox
+!theme plain
+skinparam backgroundcolor transparent
+
+participant "Notebook\nAE" as AE 
+participant "CSE" as CSE 
+
+AE -> CSE: RETRIEVE <containers>\ncse-in/Notebook-AE/Group/fopt
+CSE --> CSE: RETRIEVE\ngroup\nmembers
+AE <- CSE: Response
+
+@enduml

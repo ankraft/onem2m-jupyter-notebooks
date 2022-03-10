@@ -1,0 +1,12 @@
+@startuml
+hide footbox
+!theme plain
+skinparam backgroundcolor transparent
+
+participant "Notebook\nAE" as AE 
+participant "CSE" as CSE 
+
+AE -> CSE: CREATE <group>\ncse-in/Notebook-AE
+AE <- CSE: Response
+
+@enduml

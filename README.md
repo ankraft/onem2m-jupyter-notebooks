@@ -53,7 +53,14 @@ These notebooks include the CSE runtime in the directory [tools/ACME](tools/ACME
 
 <a name="running"></a>
 ## Running
-The local installation of Jupyter Notebooks can be run with the command:
+
+The local installation of Jupyter Notebooks can be run with one of the following commands:
+
+- Running with Jupyter Labs (preferred):
+
+		jupyter labs --NotebookApp.token='' __START__.ipynb
+
+- Running with Jupyter Notebook (classic):
 
 		jupyter notebook --NotebookApp.token='' __START__.ipynb
 
@@ -107,11 +114,6 @@ Control access to resources with Access Control Policies.
 Subscribe to changes of resources and receive notifications.
 - [onem2m-07-flexcontainer.ipynb](onem2m-07-flexcontainer.ipynb)  
 What are &lt;FlexContainer> resources and how to use them?
-
-### Cleanup
-
-- [onem2m-99-cleanup.ipynb](onem2m-99-cleanup.ipynb)  
-The code in this notebook removes the resources created by the other notebooks. This should be the last notebook to run, but can be executed whenever necessary.
 
 ## License
 

@@ -58,7 +58,7 @@ The local installation of Jupyter Notebooks can be run with one of the following
 
 - Running with Jupyter Labs (preferred):
 
-		jupyter labs --NotebookApp.token='' __START__.ipynb
+		jupyter lab --NotebookApp.token='' __START__.ipynb
 
 - Running with Jupyter Notebook (classic):
 

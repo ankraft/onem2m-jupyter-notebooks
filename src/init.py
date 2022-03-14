@@ -204,7 +204,7 @@ def printConnectionError(msg:str):
     printHtmlError(
 f"""
 <b>Cannot access the CSE, or the CSE is not runnning.</b></br>
-Please <a href="start-CSE.ipynb">start the CSE</a> or check the configuration file <a href="/edit/src/config.py" target=_new>config.py</a>. 
+Please <a href="start-cse.ipynb" target="_new">start the CSE</a> or check the configuration file <a href="/edit/src/config.py" target=_new>config.py</a>. 
 Did you specify the correct address, credentials, and proxy server?</br>
 Please restart this notebook kernel after you have updated the configuration file.<br>
 <br>

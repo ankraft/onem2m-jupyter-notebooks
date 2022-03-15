@@ -215,7 +215,7 @@ Please restart this notebook kernel after you have updated the configuration fil
 # The following request methods hide a bit of the complexity of constructing the
 # requests and make them easier to read.
 
-def showResourceTree(section:bool = True, title:str = 'Resource Tree') -> None:
+def showResourceTree(section:bool = True, title:str = 'CSE Resource Tree') -> None:
     if (resp := requests.get(f'{host}/__structure__/text')).status_code == 200:
         if section:
             printmd('---')

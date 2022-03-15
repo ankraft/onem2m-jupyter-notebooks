@@ -78,8 +78,9 @@ If you run the Jupyter Notebook server without authentication token (see the *--
 
 
 <a name="binder"></a>
-## Running on Binder
-The oneM2M notebooks can be run online with binder: [https://mybinder.org/v2/gh/ankraft/onem2m-jupyter-notebooks](https://mybinder.org/v2/gh/ankraft/onem2m-jupyter-notebooks)
+## Running online with Binder
+The oneM2M notebooks can be run online with [binder](https://mybinder.org):  
+[https://mybinder.org/v2/gh/ankraft/onem2m-jupyter-notebooks/master?urlpath=lab/tree/\_\_START__.ipynb](https://mybinder.org/v2/gh/ankraft/onem2m-jupyter-notebooks/master?urlpath=lab/tree/__START__.ipynb)
 
 
 <a name="using"></a>

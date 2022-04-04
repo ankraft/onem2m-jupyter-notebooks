@@ -11,6 +11,7 @@ This repository contains a number of [Jupyter Notebooks](https://jupyter.org) th
 [![Twitter](https://img.shields.io/twitter/url/https/twitter.com/acmeCSE.svg?style=social&label=%40acmeCSE)](https://twitter.com/acmeCSE)
 
 
+![images/jupyter-lab.jpg](images/jupyter-lab.jpg)
 
 <a name="installation"></a>
 ## Installation and Configuration
@@ -24,9 +25,12 @@ This repository contains a number of [Jupyter Notebooks](https://jupyter.org) th
 		pip3 install -r requirements.txt
 
 
-- Check the configuration (see next section).
-
 ### Configuration
+
+<div class="alert alert-block alert-info" style="background-color: white; border: 2px solid; padding: 10px;">
+    <b><i class="fa fa-info-circle" aria-hidden="true"></i>&nbsp; Note</b><br>
+    Changing the configuration is only necessary when you run another CSE than the one provided with the notebooks.
+</div>
 
 Please change the configuration in the file [config.py](config.py) according to your setup. Normally, it shouldn't be necessary to change this when using the vanilla configuration from the *Eclipse om2m* installation.
 
@@ -38,10 +42,6 @@ Please change the configuration in the file [config.py](config.py) according to 
 - **notificationURLBase** : The base URL for the Notification Server.
 
 
-### Notification Server
-The Notification server is a separate notebook [start-notificationServer.ipynb](start-notificationServer.ipynb) that implements a simple notification server. The executable script can be found here: [tools/NotificationServer/NotificationServer.py](tools/NotificationServer/NotificationServer.py) .
-
-You may provide your own notification server, though.
 
 
 ### oneM2M CSE
@@ -49,10 +49,12 @@ The notebooks have been tested with the [ACME oneM2M CSE](https://github.com/ank
 
 These notebooks include the CSE runtime in the directory [tools/ACME](tools/ACME). It needs to be started via the separate notebook [start-cse.ipynb](start-cse.ipynb)
 
+### Notification Server
+The Notification server is a separate notebook [start-notificationServer.ipynb](start-notificationServer.ipynb) that implements a simple notification server. The executable script can be found here: [tools/NotificationServer/NotificationServer.py](tools/NotificationServer/NotificationServer.py) .
 
 
 <a name="running"></a>
-## Running
+## Running the Notebooks
 
 The local installation of Jupyter Notebooks can be run with one of the following commands:
 
@@ -72,9 +74,41 @@ Some browsers are not able to connect to the kernel service. See the following *
 #### Troubleshooting
 When you open a notebook in your web browser you might get an error message about a "failed connection". In this case you might try another browser. When starting the Jupyter Notebook server you see a message in the console with a URL that you can paste in a browser, for example: ``http://localhost:8888/?token=<a long token>`` .
 
-If you enabled the authentication token (which is the default) then you must use this URL including the token, because this authenticates the connection to the local Jupiter Notebook server.
 
 If you run the Jupyter Notebook server without authentication token (see the *--NotebookApp.token* option above), just use, for example ``http://localhost:8888`` .
+
+If you enabled the authentication token (which is the default for Jupyter) then you must use this URL including the token, because this authenticates the connection to the local Jupiter Notebook server.
+
+
+<a name="using"></a>
+## Working with the Exercises
+ 
+
+You can run the notebooks in any order. Each notebook has an *init* cell that initializes the notebook and creates the oneM2M resource structure for the exercises. Please execute this code cell when starting with a notebook and before executing any of the other code cells.
+
+You may always execute the first code cell of a notebook again to re-initialize the resource tree.
+
+### CSE & Notification Server Notebooks
+- [start-cse.ipynb](start-cse.ipynb)  
+This notebook runs a local CSE inside the a notebook. It is required for all the examples in the notebooks.
+- [start-notificationServer.ipynb](start-notificationServer.ipynb)  
+Notebook for receiving notifications. This must be run before working with the notebook [06-notifications-server.ipynb](06-notifications-server.ipynb).
+
+### oneM2M Notebooks & Exercises
+- [01-introduction.ipynb](01-introduction.ipynb)  
+An introduction that demonstrates how to retrieve the root &lt;CSEBase> resource.
+- [02-basic-resources.ipynb](02-basic-resources.ipynb)  
+This notebook shows your how to create and work with the basic oneM2M resources: &lt;AE>, &lt;Container> and &lt;ContentInstance>.
+- [03-discovery.ipynb](03-discovery.ipynb)  
+How do you search for resources in a CSE?.
+- [04-groups.ipynb](04-groups.ipynb)  
+Group resources together and send requests to a group instead of each single resource.
+- [05-accesscontrol.ipynb](05-accesscontrol.ipynb)  
+Control access to resources with Access Control Policies.
+- [06-notifications.ipynb](06-notifications.ipynb)  
+Subscribe to changes of resources and receive notifications.
+- [07-flexcontainer.ipynb](07-flexcontainer.ipynb)  
+What are &lt;FlexContainer> resources and how to use them?
 
 
 <a name="binder"></a>
@@ -83,38 +117,6 @@ The oneM2M notebooks can be run online with [binder](https://mybinder.org):
 [https://mybinder.org/v2/gh/ankraft/onem2m-jupyter-notebooks/master?urlpath=lab/tree/\_\_START__.ipynb](https://mybinder.org/v2/gh/ankraft/onem2m-jupyter-notebooks/master?urlpath=lab/tree/__START__.ipynb)
 
 
-<a name="using"></a>
-## Using the Notebooks
-
-### Running the Examples
-
-You can (almost) execute the notebooks in any order, but you should at least execute [onem2m-02-basic-resources.ipynb](onem2m-02-basic-resources.ipynb) to create the basic resource structure for the subsequent notebooks.
-
-Each notebook has an *init* section. Please execute this section before executing any of the other sections.
-
-You may always restart the CSE's notebook to reset the resource structure, or run the [onem2m-99-cleanup.ipynb](onem2m-99-cleanup.ipynb) notebook to remove the structures from the CSE.
-
-#### CSE & Notification Server Notebooks
-- [start-cse.ipynb](start-cse.ipynb)  
-This notebook runs a local CSE inside the a notebook. It is required for all the examples in the notebooks.
-- [start-notificationServer.ipynb](start-notificationServer.ipynb)  
-Notebook for receiving notifications. This must be run before using [onem2m-06-notifications-server.ipynb](onem2m-06-notifications-server.ipynb).
-
-#### oneM2M Notebooks & Exercises
-- [onem2m-01-introduction.ipynb](onem2m-01-introduction.ipynb)  
-An introduction that demonstrates how to retrieve the root &lt;CSEBase> resource.
-- [onem2m-02-basic-resources.ipynb](onem2m-02-basic-resources.ipynb)  
-This notebook shows your how to create and work with the basic oneM2M resources: &lt;AE>, &lt;Container> and &lt;ContentInstance>.
-- [onem2m-03-discovery.ipynb](onem2m-03-discovery.ipynb)  
-How do you search for resources in a CSE?.
-- [onem2m-04-groups.ipynb](onem2m-04-groups.ipynb)  
-Group resources together and send requests to a group instead of each single resource.
-- [onem2m-05-accesscontrol.ipynb](onem2m-05-accesscontrol.ipynb)  
-Control access to resources with Access Control Policies.
-- [onem2m-06-notifications.ipynb](onem2m-06-notifications.ipynb)  
-Subscribe to changes of resources and receive notifications.
-- [onem2m-07-flexcontainer.ipynb](onem2m-07-flexcontainer.ipynb)  
-What are &lt;FlexContainer> resources and how to use them?
 
 ## License
 

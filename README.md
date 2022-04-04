@@ -27,21 +27,26 @@ This repository contains a number of [Jupyter Notebooks](https://jupyter.org) th
 
 ### Configuration
 
-<div class="alert alert-block alert-info" style="background-color: white; border: 2px solid; padding: 10px;">
-    <b><i class="fa fa-info-circle" aria-hidden="true"></i>&nbsp; Note</b><br>
-    Changing the configuration is only necessary when you run another CSE than the one provided with the notebooks.
-</div>
+> **Note**  
+> Changing these configurations is only necessary when you run your own CSE and Notification Server instead the one provided with the notebooks.
 
-Please change the configuration in the file [config.py](config.py) according to your setup. Normally, it shouldn't be necessary to change this when using the vanilla configuration from the *Eclipse om2m* installation.
+Please change the configuration in the file [config.py](config.py) according to your setup.
 
+#### CSE Configuration
 - **cseRN** : The resource name of the CSE.
-- **url** : The URL of the CSE we want to connect to in the examples in the notebooks.
-- **originator** : Originator ID to access the CSE.
-- **notificationPort** : The port for Notification Server.
-- **notificationInterface** : The network interface the Notifcation Server binds to. An empty string means "all interfaces".
+- **host** : The URL of the CSE we want to connect to in the examples in the notebooks.
+- **defaultOriginator** : Originator ID to access the CSE.
+- **upperTester** : The full URL to access the CSE's *Upper Tester* interface , or *None* if not defined.
+
+#### Notification Server Configuration
 - **notificationURLBase** : The base URL for the Notification Server.
+- **notificationPort** : The port for Notification Server.
 
+#### Proxy Configuration
+(Only necessary if your CSE / Notification Server can only be reached through a proxy server)
 
+- **httpProxy** : URL of your local network's http proxy server, or *None*.
+- **httpsProxy** : URL of your local network's https proxy, or *None*.
 
 
 ### oneM2M CSE

@@ -3,8 +3,8 @@ This repository contains a number of [Jupyter Notebooks](https://jupyter.org) th
 
 - [Installation and Configuration](#installation)  
 - [Running](#running)
-- [Runing on Binder](#binder)  
 - [Using the Notebooks](#using)  
+- [Runing on Binder](#binder)  
 
 
 [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/ankraft/onem2m-jupyter-notebooks/master?urlpath=lab/tree/__START__.ipynb)

@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 from copy import deepcopy
+from syslog import LOG_WARNING
 from typing import Callable, Dict, Union, Any, Tuple, cast
 from pathlib import Path
 import json, os, fnmatch
@@ -90,6 +91,7 @@ class ACMEPContext(PContext):
 						 printFunc = self.prnt,
 						 preFunc = preFunc, 
 						 postFunc = postFunc, 
+						 matchFunc = lambda p, l, r : TextTools.simpleMatch(l, r),
 						 errorFunc = errorFunc)
 
 		self.poas:Dict[str, str] = { CSE.cseCsi: None }		# Default: Own CSE
@@ -109,14 +111,14 @@ class ACMEPContext(PContext):
 		if _metaPrompt in self.meta:
 			if any(key in _metaPromptlessEvents for key in self.meta.keys()):
 				self.setError(PError.invalid, f'"@prompt" is not allowed together with any of: {_metaPromptlessEvents}')
-				self.state = PState.invalid
+				self.state = PState.terminatedWithError
 		if _metaTimeout in self.meta:
 			t = self.meta[_metaTimeout]
 			try:
 				self.maxRuntime = float(t)
 			except ValueError as e:
-				self.setError(PError.invalid, f'"@timeout" invalid value, must be a float: {t}')
-				self.state = PState.invalid
+				self.setError(PError.invalid, f'"@timeout" has an invalid value; it must be a float: {t}')
+				self.state = PState.terminatedWithError
 	
 
 	def reset(self) -> None:
@@ -135,14 +137,14 @@ class ACMEPContext(PContext):
 		L.isDebug and L.logDebug(msg)
 
 
-	def logError(self, pcontext:PContext, msg:str) -> None:
+	def logError(self, pcontext:PContext, msg:str, exception:Exception = None) -> None:
 		"""	Callback for error log messages.
 
 			Args:
 				pcontext: Script context.
 				msg: log message.
 		"""
-		L.logErr(msg)
+		L.logErr(msg, exc = exception)
 
 
 	def prnt(self, pcontext:PContext, msg:str) -> None:
@@ -204,7 +206,7 @@ class ACMEPContext(PContext):
 				The scripts "PContext" object, or None in case of an error.
 		"""
 		if CSE.isHeadless:
-			return
+			return pcontext
 		L.consoleClear()
 		return pcontext
 
@@ -329,7 +331,7 @@ class ACMEPContext(PContext):
 				The scripts "PContext" object, or None in case of an error.
 		 """
 		if CSE.isHeadless:
-			return
+			return pcontext
 		try:
 			L.console(json.loads(arg))
 		except Exception as e:
@@ -543,7 +545,7 @@ class ACMEPContext(PContext):
 		""" Retrieve an attribute of a resource via its key path. 
 		
 			Example:
-				${attribute <key path> <resource>}
+				[attribute <key path> <resource>]
 			Args:
 				pcontext: PContext object of the runnig script.
 				arg: remaining argument(s) of the command.
@@ -552,7 +554,6 @@ class ACMEPContext(PContext):
 		"""
 		# extract key path
 		key, found, res = arg.strip().partition(' ')
-		L.logWarn(arg)
 		if not found:
 			pcontext.setError(PError.invalid, f'Invalid format: attribute <key> <resource>')
 			return None
@@ -570,7 +571,7 @@ class ACMEPContext(PContext):
 		""" Retrieve the CSE status . 
 		
 			Example:
-				${cseStatus}
+				[cseStatus]
 			Args:
 				pcontext: PContext object of the runnig script.
 				arg: remaining argument(s) of the command.
@@ -584,7 +585,7 @@ class ACMEPContext(PContext):
 		""" Check whether an attribute exists for the given its key path . 
 		
 			Example:
-				${hasAttribute <key path> <resource>}
+			[hasAttribute <key path> <resource>]
 			Args:
 				pcontext: PContext object of the runnig script.
 				arg: remaining argument(s) of the command.
@@ -610,7 +611,7 @@ class ACMEPContext(PContext):
 			such as Jupyter Notebooks.
 		
 			Example:
-				${isIPython}
+			[isIPython]
 			Args:
 				pcontext: PContext object of the runnig script.
 				arg: remaining argument(s) of the command. Shall be none.
@@ -771,7 +772,7 @@ class ACMEPContext(PContext):
 			if (rqi := rp.pop('rqi', None)) is not None:
 				req['rqi'] = rqi
 			# add remaining attributes to the filterCriteria of a request
-			for key in rp.keys():
+			for key in list(rp.keys()):
 				Utils.setXPath(req, f'fc/{key}', rp.pop(key))
 
 		# Get the resource for some operations
@@ -951,7 +952,7 @@ class ScriptManager(object):
 			Restart the script manager service, ie. clear the scripts and storage. 
 			They are reloaded during import.
 		"""
-		self.scripts.clear()
+		self.removeScripts()
 		self.storage.clear()
 		L.isDebug and L.logDebug('ScriptManager restarted')
 	
@@ -1040,7 +1041,7 @@ class ScriptManager(object):
 			Return:
 				Boolean. Usually true to continue with monitoring.
 		"""
-		L.isDebug and L.logDebug(f'Looking for scheduled scripts')
+		#L.isDebug and L.logDebug(f'Looking for scheduled scripts')
 		for each in self.findScripts(meta = _metaAt):
 			try:
 				if DateUtils.cronMatchesTimestamp(at := each.meta.get(_metaAt)):
@@ -1135,6 +1136,12 @@ class ScriptManager(object):
 		return pcontext
 	
 
+	def removeScripts(self) -> None:
+		"""	Remove all scripts.
+		"""
+		self.scripts.clear()
+	
+
 	def findScripts(self, name:str = None, meta:Union[str, list[str]] = None) -> list[PContext]:
 		""" Find scripts by a filter: `name` is the name of the script. `meta` filters the meta data. 
 			Filters are and-combined.
@@ -1183,6 +1190,7 @@ class ScriptManager(object):
 		"""
 		def runCB(pcontext:PContext, argument:str) -> None:
 			pcontext.run(verbose = self.verbose, argument = argument)
+
 
 		if pcontext.state == PState.running:
 			L.isWarn and L.logWarn(f'Script "{pcontext.name}" is already running')

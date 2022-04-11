@@ -65,6 +65,7 @@ cseType:CSEType									= None
 cseCsi:str										= None
 cseCsiRelative:str								= None	# Without the leading /
 cseCsiSlash:str  								= None
+cseSpid:str										= None
 cseRi:str 										= None
 cseRn:str										= None
 cseOriginator:str								= None
@@ -87,7 +88,7 @@ def startup(args:argparse.Namespace, **kwargs: Dict[str, Any]) -> bool:
 	global announce, console, dispatcher, event, group, httpServer, importer, mqttClient, notification, registration
 	global remote, request, script, security, statistics, storage, time, timeSeries, validator
 	global aeStatistics
-	global supportedReleaseVersions, cseType, defaultSerialization, cseCsi, cseCsiSlash, cseCsiRelative, cseRi, cseRn, releaseVersion
+	global supportedReleaseVersions, cseType, defaultSerialization, cseCsi, cseCsiSlash, cseCsiRelative, cseSpid, cseRi, cseRn, releaseVersion
 	global cseOriginator
 	global isHeadless, cseStatus
 
@@ -120,6 +121,7 @@ def startup(args:argparse.Namespace, **kwargs: Dict[str, Any]) -> bool:
 	cseCsi					 = Configuration.get('cse.csi')
 	cseCsiRelative			 = cseCsi[1:]							# no leading slash
 	cseCsiSlash				 = f'{cseCsi}/'
+	cseSpid					 = Configuration.get('cse.spid')
 	cseRi					 = Configuration.get('cse.ri')
 	cseRn					 = Configuration.get('cse.rn')
 	cseOriginator			 = Configuration.get('cse.originator')
@@ -135,12 +137,16 @@ def startup(args:argparse.Namespace, **kwargs: Dict[str, Any]) -> bool:
 	L.log('Starting CSE')
 	L.log(f'CSE-Type: {cseType.name}')
 	L.log(Configuration.print())
-	L.enableQueue = False		# No queuing of log messages during startup
+	L.queueOff()				# No queuing of log messages during startup
 	
 	# set the logger for the backgroundWorkers. Add an offset to compensate for
 	# this and other redirect functions to determine the correct file / linenumber
 	# in the log output
-	BackgroundWorkerPool.setLogger(lambda l,m: L.logWithLevel(l,m, stackOffset=2))	
+	BackgroundWorkerPool.setLogger(lambda l,m: L.logWithLevel(l, m, stackOffset = 2))
+	BackgroundWorkerPool.setJobBalance(	balanceTarget = Configuration.get('cse.operation.jobBalanceTarget'),
+										balanceLatency = Configuration.get('cse.operation.jobBalanceLatency'),
+										balanceReduceFactor = Configuration.get('cse.operation.jobBalanceReduceFactor'))
+
 	console = Console()						# Start the console
 
 	storage = Storage()						# Initiatlize the resource storage
@@ -177,7 +183,7 @@ def startup(args:argparse.Namespace, **kwargs: Dict[str, Any]) -> bool:
 		return False 					
 
 	# Enable log queuing
-	L.enableQueue = True	
+	L.queueOn()	
 
 	# Send an event that the CSE startup finished
 	cseStatus = CSEStatus.RUNNING
@@ -220,7 +226,7 @@ def _shutdown() -> None:
 		return
 		
 	cseStatus = CSEStatus.STOPPING
-	L.enableQueue = False
+	L.queueOff()
 	L.isInfo and L.log('CSE shutting down')
 	if event:	# send shutdown event
 		event.cseShutdown() 	# type: ignore
@@ -263,7 +269,7 @@ def resetCSE() -> None:
 		L.enableScreenLogging = Configuration.get('logging.enableScreenLogging')	# Set screen logging to the originally configured values
 
 		L.setLogLevel(Configuration.get('logging.level'))
-		L.enableQueue = False	# Disable log queuing for restart
+		L.queueOff()	# Disable log queuing for restart
 		
 		httpServer.pause()
 		mqttClient.pause()
@@ -281,7 +287,7 @@ def resetCSE() -> None:
 		httpServer.unpause()
 
 		# Enable log queuing again
-		L.enableQueue = True
+		L.queueOn()
 
 		# Send restart event
 		event.cseRestarted()	# type: ignore [attr-defined]   

@@ -10,11 +10,9 @@
 from __future__ import annotations
 from .TextTools import simpleMatch
 import random, sys, heapq, datetime, traceback, time
-from threading import Thread, Timer, Lock
-from typing import Callable, List, Dict, Any
+from threading import Thread, Timer, Event, RLock, enumerate as threadsEnumerate
+from typing import Callable, List, Dict, Any, Tuple
 import logging
-
-
 
 
 def _utcTime() -> float:
@@ -193,7 +191,11 @@ class BackgroundWorker(object):
 						continue
 					raise
 
+		except SystemExit:
+			quit()
+
 		except Exception as e:
+
 			if BackgroundWorker._logger:
 				BackgroundWorker._logger(logging.ERROR, f'Worker "{self.name}" exception during callback {self.callback.__name__}: {str(e)}\n{"".join(traceback.format_exception(etype=type(e), value=e, tb=e.__traceback__))}')
 		finally:
@@ -228,6 +230,170 @@ class BackgroundWorker(object):
 		return f'BackgroundWorker(name={self.name}, callback = {str(self.callback)}, running = {self.running}, interval = {self.interval:f}, startWithDelay = {self.startWithDelay}, numberOfRuns = {self.numberOfRuns:d}, dispose = {self.dispose}, id = {self.id}, runOnTime = {self.runOnTime})'
 
 
+
+class Job(Thread):
+	"""	Job class that extends Thread with pause, resume, stop functionalities, and lists of
+		running and paused jobs for reuse.
+	"""
+
+	jobListLock	= RLock()			# Re-entrent lock (for the same thread)
+
+	# Paused and running job lists
+	pausedJobs:list[Job] = []
+	runningJobs:list[Job] = []
+
+	# Defaults for reducing overhead jobs
+	balanceTarget:float = 3.0		# Target balance between paused and running jobs (n paused for 1 running)
+	balanceLatency:int = 1000		# Number of requests for getting a new Job before a check
+	balanceReduceFactor:float = 2.0	# Factor to reduce the paused jobs (number of paused / balanceReduceFactor)
+	_balanceCount:int = 0			# Counter for current runs. Compares against balance
+
+
+	def __init__(self, *args:Any, **kwargs:Any) -> None:
+		super(Job, self).__init__(*args, **kwargs)
+		self.setDaemon(True)
+
+		self.pauseFlag = Event() # The flag used to pause the thread
+		self.pauseFlag.set() # Set to True, means the job is not paused
+		self.runningFlag = Event() # Used to stop the thread identification
+		self.runningFlag.set() # Set running to True
+
+		self.task:Callable = None
+		self.finished:Callable = None
+
+
+	def run(self) -> None:
+		"""	Internal runner function for a thread job.
+		"""
+		while self.runningFlag.is_set():
+			self.pauseFlag.wait() # return immediately when it is True, block until the internal flag is True when it is False
+			if not self.runningFlag.is_set():
+				break
+			if self.task:
+				self.task()
+
+			self.pause()
+			self.task = None
+
+			if self.finished:
+				self.finished(self)
+				self.finished = None
+
+
+	def pause(self) -> Job:
+		"""	Pause a thread job. The job is removed from the running list
+			(if still present there) and moved to the paused list.
+		
+			Return:
+				The Job object.
+		"""
+		with Job.jobListLock:
+			if self in Job.runningJobs:
+				Job.runningJobs.remove(self)
+			Job.pausedJobs.append(self)
+		self.pauseFlag.clear() # Block the thread
+		return self
+
+
+	def resume(self) -> Job:
+		"""	Resume a thread job. The job is removed from the paused list
+			(if still present there) and moved to the running list.
+		
+			Return:
+				The Job object.
+		"""
+		with Job.jobListLock:
+			if self in Job.pausedJobs:
+				Job.pausedJobs.remove(self)
+			Job.runningJobs.append(self)
+		self.pauseFlag.set() # Stop blocking
+		return self
+
+
+	def stop(self) -> Job:
+		"""	Stop a thread job
+
+			Return:
+				The Job object.
+		"""
+		self.runningFlag.clear() # Stop the thread
+		self.pauseFlag.set() # Resume the thread from the suspended state
+		if self in Job.runningJobs:
+			Job.runningJobs.remove(self)
+		if self in Job.pausedJobs:
+			Job.runningJobs.remove(self)
+		return self
+	
+
+	def setTask(self, task:Callable, finished:Callable = None, name:str = None) -> Job:
+		"""	Set a task to run for the Job.
+		
+			Args:
+				task: A Callable. This must include arguments, so a lambda can be used here.
+				finished: A Callable that is called when the task finished.
+				name: Optional name of the job.
+			Return:
+				The Job object.
+		"""
+		self.task = task
+		self.finished = finished
+		self.setName(name)
+		return self
+	
+
+	@classmethod
+	def getJob(cls, task:Callable, finished:Callable = None, name:str = None) -> Job:
+		"""	Get a Job object, and set a task and a finished Callable for it to execute.
+			The Job object is either taken from the paused list (if available), or
+			a new one is created.
+			After calling this method the Job instance is neither in the paused nor the
+			running list. It is moved into the running list, for example, with the `resume()`
+			method.
+
+			Args:
+				task: A Callable. This must include arguments, so a lambda can be used here.
+				finished: A Callable that is called when the task finished.
+				name: Optional name of the job.
+			Return:
+				The Job object.
+		"""
+		with Job.jobListLock :
+			if not Job.pausedJobs:
+				job = Job().pause()	# new job and internal pause before start
+				job.start() # start the thread, but since it is paused, it will not run the task
+
+			job = Job.pausedJobs.pop(0).setTask(task, finished, name)	# remove next job from paused list and set the task parameter
+			Job._balanceJobs()	# check the pause/running jobs balance
+			return job
+	
+
+	@classmethod
+	def _balanceJobs(cls) -> None:
+		if not Job.balanceLatency:
+			return
+		Job._balanceCount += 1
+		if Job._balanceCount >= Job.balanceLatency:		# check after balancyLatency runs
+			if float(lp := len(Job.pausedJobs)) / float(len(Job.runningJobs)) > Job.balanceTarget:				# out of balance?
+				#print(f'balance: {float(lp := len(Job.pausedJobs)) / float(len(Job.runningJobs))} reducing: {int(lp / Job.balanceReduceFactor)} lp: {lp} lr: {len(Job.runningJobs)}')
+				for _ in range((int(lp / Job.balanceReduceFactor))):
+					Job.pausedJobs.pop(0).stop()
+			Job._balanceCount = 0
+
+
+	@classmethod
+	def setJobBalance(cls, balanceTarget:float = 3.0, balanceLatency:int = 1000, balanceReduceFactor:float = 2.0) -> None:
+		"""	Set parameters to balance the number of paused Jobs.
+
+			Args:
+				balanceTarget: Target balance between paused and running jobs (n paused for 1 running).
+				balanceLatency: Number of requests for getting a new Job before a balance check.
+				balanceReduceFactor: Factor to reduce the paused jobs (number of paused / balanceReduceFactor).	
+		"""
+		cls.balanceTarget = balanceTarget
+		cls.balanceLatency = balanceLatency
+		cls.balanceReduceFactor = balanceReduceFactor
+
+
 class BackgroundWorkerPool(object):
 	"""	Pool and factory for background workers and actors.
 	"""
@@ -235,7 +401,8 @@ class BackgroundWorkerPool(object):
 	workerQueue:List 								= []
 	""" Priority queue. Contains tuples (nextExecution timestamp, workerID). """
 	workerTimer:Timer								= None
-	queueLock:Lock					 				= Lock()
+
+	queueLock:RLock					 				= RLock()
 
 
 	def __new__(cls, *args:str, **kwargs:str) -> BackgroundWorkerPool:
@@ -253,6 +420,18 @@ class BackgroundWorkerPool(object):
 
 
 	@classmethod
+	def setJobBalance(cls, balanceTarget:float = 3.0, balanceLatency:int = 1000, balanceReduceFactor:float = 2.0) -> None:
+		"""	Set parameters to balance the number of paused Jobs.
+
+			Args:
+				balanceTarget: Target balance between paused and running jobs (n paused for 1 running).
+				balanceLatency: Number of requests for getting a new Job before a balance check.
+				balanceReduceFactor: Factor to reduce the paused jobs (number of paused / balanceReduceFactor).	
+		"""
+		Job.setJobBalance(balanceTarget, balanceLatency, balanceReduceFactor)
+
+
+	@classmethod
 	def newWorker(cls,	interval:float, 
 						workerCallback:Callable,
 						name:str = None, 
@@ -262,7 +441,7 @@ class BackgroundWorkerPool(object):
 						runOnTime:bool = True, 
 						runPastEvents:bool = False, 
 						finished:Callable = None, 
-						ignoreException:bool = False) -> BackgroundWorker:	# typxe:ignore[type-arg]
+						ignoreException:bool = False) -> BackgroundWorker:	# type:ignore[type-arg]
 		"""	Create a new background worker that periodically executes the callback.
 
 			Args:
@@ -366,6 +545,51 @@ class BackgroundWorkerPool(object):
 		return workers
 
 
+	#
+	#	Jobs
+	#
+
+	@classmethod
+	def runJob(cls, task:Callable, name:str = None) -> Job:
+		"""	Run a task as a Thread. Reuse finished threads if possible.
+
+			Args:
+				task: A Callable. This must include arguments, so a lambda can be used here.
+				name: Optional name of the job.
+			Return:
+				Job instance
+		"""
+		return Job.getJob(task, name = name).resume()
+		# job.setName(name if name else str(job.native_id))
+
+
+	@classmethod
+	def countJobs(cls) -> Tuple[int, int]:
+		"""	Return the number of running and paused Jobs.
+		
+			Return:
+				Tuple (running Jobs, paused Jobs). Both are integers
+		"""
+		return (len(Job.runningJobs), len(Job.pausedJobs))
+
+
+	@classmethod
+	def killJobs(cls) -> None:
+		"""	Stop and remove all Jobs.
+		"""
+		while Job.runningJobs:
+			# Job.runningJobs.pop(0).stop()
+			Job.runningJobs[0].stop()	# will remove itself
+		while Job.pausedJobs:
+			Job.pausedJobs[0].stop()	# will remove itself
+		while any( [ isinstance(each, Job) for each in threadsEnumerate() ] ):
+			time.sleep(0.00001)
+
+
+	#
+	#	Internals
+	#
+
 	@classmethod
 	def _removeBackgroundWorkerFromPool(cls, worker:BackgroundWorker) -> None:
 		"""	Remove a BackgroundWorker from the internal pool.
@@ -435,9 +659,6 @@ class BackgroundWorkerPool(object):
 			if cls.workerQueue:
 				_, workerID, name = heapq.heappop(cls.workerQueue)
 				if worker := cls.backgroundWorkers.get(workerID):
-					thread = Thread(target=worker._work)
-					thread.setDaemon(True)
-					thread.setName(name)
-					thread.start()
+					cls.runJob(worker._work, name)
 			cls._startTimer()	# start timer again
 

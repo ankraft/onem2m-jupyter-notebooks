@@ -65,13 +65,13 @@ def toHex(bts:bytes, toBinary:bool=False, withLength:bool=False) -> str:
 
 def simpleMatch(st:str, pattern:str, star:str='*') -> bool:
 	"""	Simple string match function. 
-		This class supports the following expression operators:
 
+		This class supports the following expression operators:
 	
 		- '?' : any single character
-		- '*' _ zero or more characters
-		- '+' _ one or more characters
-		- '\\' - Escape an expression operator
+		- '*' : zero or more characters
+		- '+' : one or more characters
+		- '\\' : Escape an expression operator
 
 		Examples: 
 			"hello" - "h?llo" -> True

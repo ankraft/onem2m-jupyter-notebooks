@@ -50,7 +50,7 @@ class CSEBase(AnnounceableResource):
 	}
 
 
-	def __init__(self, dct:JSON = None, create:bool = False) -> None:
+	def __init__(self, dct:JSON, create:bool = False) -> None:
 		super().__init__(T.CSEBase, dct, '', create = create)
 
 		self.setAttribute('ri', 'cseid', overwrite = False)
@@ -74,9 +74,9 @@ class CSEBase(AnnounceableResource):
 		
 		if not Utils.isValidCSI(self.csi):
 			L.logWarn(dbg := f'Wrong format for CSEBase.csi: {self.csi}')
-			return Result(status = False, dbg = dbg)
+			return Result.errorResult(dbg = dbg)
 
-		return Result(status =True)
+		return Result.successResult()
 
 
 	def validate(self, originator:str = None, create:bool = False, dct:JSON = None, parentResource:Resource = None) -> Result:
@@ -101,7 +101,7 @@ class CSEBase(AnnounceableResource):
 					CSE.dispatcher.updateResource(nresource)
 			self[Resource._node] = nl
 
-		return Result(status = True)
+		return Result.successResult()
 
 
 	def willBeRetrieved(self, originator:str, request:CSERequest, subCheck:bool = True) -> Result:
@@ -114,7 +114,7 @@ class CSEBase(AnnounceableResource):
 		# add the supported release versions
 		self['srv'] = CSE.supportedReleaseVersions
 
-		return Result(status = True)
+		return Result.successResult()
 
 
 		

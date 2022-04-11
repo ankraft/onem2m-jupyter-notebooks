@@ -194,13 +194,21 @@ class ResourceTypes(ACMEIntEnum):
 
 
 	def isAnnounced(self) -> bool:
-		"""	Test whether this is an announced resource type.
+		"""	Test whether this type is an announced resource type.
 		
 			Return:
-				Boolean
+				True if the type is an announced resource type.
 		"""
 		return self.value in ResourceTypes._announcedSetFull 		# type: ignore
-
+	
+	
+	def isVirtual(self) -> bool:
+		"""	Test whether this type is virtual resource type.
+		
+			Return:
+				True if the type is a virtual resource type.
+		"""
+		return self.value in ResourceTypes._virtualResourcesSet		#  type: ignore
 
 
 
@@ -253,13 +261,6 @@ class ResourceTypes(ACMEIntEnum):
 		"""
 		return ResourceTypes._supportedResourceTypes				# type: ignore
 
-
-	@classmethod
-	def isStateTagResourceTypes(self, ty:int) -> bool:
-		"""	Check wether `ty` is a resource type that allowes the 
-			'stateTage' attribute.
-		"""
-		return ty in ResourceTypes._stateTagResourceTypes			# type: ignore
 
 	@classmethod
 	def isInstanceResource(cls, ty:int) -> bool:
@@ -443,12 +444,6 @@ ResourceTypes._creatorAllowed = [ 							#  type: ignore
 		ResourceTypes.ACTR, ResourceTypes.CIN, ResourceTypes.CNT, ResourceTypes.GRP, 	
 		ResourceTypes.SUB, ResourceTypes.FCNT, ResourceTypes.TS 
 ]
-
-
-# Resource types that allow state tags
-ResourceTypes._stateTagResourceTypes = [					#  type: ignore
-	 ResourceTypes.CNT, ResourceTypes.CIN, ResourceTypes.FCNT, ResourceTypes.FCI
-]
 	
 
 
@@ -484,6 +479,7 @@ class Cardinality(ACMEIntEnum):
 	""" Resource attribute cardinalities """
 	CAR1			= auto()
 	CAR1L			= auto()
+	CAR1LN			= auto() # mandatory list AND not empty
 	CAR01			= auto()
 	CAR01L			= auto()
 	CAR1N			= auto() # mandatory, but may be Null/None
@@ -723,6 +719,11 @@ class Permission(ACMEIntEnum):
 	NOTIFY 				= 16
 	DISCOVERY			= 32
 	ALL					= 63
+
+	@classmethod
+	def allExcept(cls, permission:Permission) -> int:
+		p = Permission.ALL - permission
+		return p if Permission.NONE <= p <= Permission.ALL else Permission.NONE
 
 
 ##############################################################################
@@ -1035,6 +1036,7 @@ class BeaconCriteria(ACMEIntEnum):
 #	Result and Argument and Header Data Classes
 #
 
+
 @dataclass
 class Result:
 	resource:Resource			= None		# type: ignore # Actually this is a Resource type, but have a circular import problem.
@@ -1046,10 +1048,39 @@ class Result:
 	status:bool 				= None
 
 
-	def errorResult(self) -> Result:
+	def errorResultCopy(self) -> Result:
 		""" Copy only the rsc and dbg to a new result instance.
+
+			Return:
+				Result instance.
 		"""
-		return Result(status=self.status, rsc=self.rsc, dbg=self.dbg)
+		return Result(status = self.status, rsc = self.rsc, dbg = self.dbg)
+	
+
+	@classmethod
+	def errorResult(cls, rsc:ResponseStatusCode = ResponseStatusCode.badRequest, dbg:str = '', request:CSERequest = None, data:Any = None) -> Result:
+		"""	Create and return a Result object with `status = False` and RSC and debug
+			message set.
+
+			Args:
+				rsc: ResponseStatusCode to return as an error.
+				dbg: String with the debug message.
+				request: CSERequest to return.
+			Return:
+				Error Result instance.
+		"""
+		return Result(status = False, rsc = rsc, request = request, dbg = dbg, data = data) 
+
+
+	@classmethod
+	def successResult(cls) -> Result:
+		"""	Create and return a Result object with `status = True`.
+
+			Return:
+				Success Result instance. This is always the same Result instance!
+		"""
+		return _successResult
+
 
 	def toData(self, ct:ContentSerializationType=None) -> str|bytes|JSON:
 		from ..resources.Resource import Resource
@@ -1102,6 +1133,10 @@ class Result:
 				for k,v in originalRequest.parameters.items():	# don't overwrite existing parameters
 					if k not in self.request.parameters:
 						self.request.parameters[k] = v
+
+
+# Result instance to be re-used all over the place
+_successResult = Result(status = True)
 
 
 ##############################################################################
@@ -1164,6 +1199,7 @@ class CSERequest:
 	rsc:ResponseStatusCode			= ResponseStatusCode.UNKNOWN	# Response Status Code
 	parameters:Parameters			= field(default_factory=dict)	# Any additional parameters
 	requestType:RequestType			= RequestType.NOTSET
+	isResponse:bool					= False	# Default this is a request
 
 
 ##############################################################################
@@ -1207,6 +1243,7 @@ class AttributePolicy:
 """	Represent a dictionary of attribute policies used in validation. """
 AttributePolicyDict = Dict[str, AttributePolicy]
 FlexContainerAttributes = Dict[str, Dict[str, AttributePolicy]]
+FlexContainerSpecializations = Dict[str, str]
 
 
 ##############################################################################

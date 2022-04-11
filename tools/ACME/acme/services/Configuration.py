@@ -15,6 +15,7 @@ from typing import Any, Dict, Tuple
 from InquirerPy.utils import InquirerPySessionResult
 from rich.console import Console
 from InquirerPy import prompt, inquirer
+import isodate
 
 from ..etc.Constants import Constants as C
 from ..etc.Types import CSEType, ContentSerializationType, Permission
@@ -117,7 +118,6 @@ class Configuration(object):
 				#	CSE
 				#
 
-
 				'cse.type'								: config.get('cse', 'type',								fallback = 'IN'),		# IN, MN, ASN
 				'cse.spid'								: config.get('cse', 'serviceProviderID',				fallback = 'acme.example.com'),
 				'cse.csi'								: config.get('cse', 'cseID',							fallback = '/id-in'),
@@ -133,14 +133,23 @@ class Configuration(object):
 				'cse.checkExpirationsInterval'			: config.getint('cse', 'checkExpirationsInterval',		fallback = 60),		# Seconds
 				'cse.flexBlockingPreference'			: config.get('cse', 'flexBlockingPreference',			fallback = 'blocking'),
 				'cse.supportedReleaseVersions'			: config.getlist('cse', 'supportedReleaseVersions',		fallback = ['2a', '3', '4']), # type: ignore [attr-defined]
-				'cse.releaseVersion'					: config.get('cse', 'releaseVersion',					fallback = '4'),
+				'cse.releaseVersion'					: config.get('cse', 'releaseVersion',					fallback = '3'),
 				'cse.defaultSerialization'				: config.get('cse', 'defaultSerialization',				fallback = 'json'),
 
 				#
 				#	CSE Security
 				#
+
 				'cse.security.enableACPChecks'			: config.getboolean('cse.security', 'enableACPChecks', 	fallback = True),
 				'cse.security.fullAccessAdmin'			: config.getboolean('cse.security', 'fullAccessAdmin', 	fallback = True),
+
+				#
+				#	CSE Operation
+				#
+
+				'cse.operation.jobBalanceTarget'		: config.getfloat('cse.operation', 'jobBalanceTarget', 	fallback = 3.0),
+				'cse.operation.jobBalanceLatency'		: config.getint('cse.operation', 'jobBalanceLatency', 	fallback = 1000),
+				'cse.operation.jobBalanceReduceFactor'	: config.getfloat('cse.operation', 'jobBalanceReduceFactor', 	fallback = 2.0),
 
 				#
 				#	HTTP Server
@@ -152,6 +161,7 @@ class Configuration(object):
 				'http.address'							: config.get('server.http', 'address', 					fallback = 'http://127.0.0.1:8080'),
 				'http.enableStructureEndpoint'			: config.getboolean('server.http', 'enableStructureEndpoint', fallback = False),
 				'http.enableUpperTesterEndpoint'		: config.getboolean('server.http', 'enableUpperTesterEndpoint', fallback = False),
+				'http.allowPatchForDelete'				: config.getboolean('server.http', 'allowPatchForDelete', fallback = False),
 
 				#
 				#	HTTP Server Security
@@ -207,7 +217,7 @@ class Configuration(object):
 				'logging.count'							: config.getint('logging', 'count', 					fallback = 10),		# Number of log files
 				'logging.stackTraceOnError'				: config.getboolean('logging', 'stackTraceOnError',		fallback = True),
 				'logging.enableBindingsLogging'			: config.getboolean('logging', 'enableBindingsLogging',	fallback = False),
-
+				'logging.queueSize'						: config.getint('logging', 'queueSize', 				fallback = 5000),	# Size of the log queue
 
 				#
 				#	Registrar CSE
@@ -291,8 +301,8 @@ class Configuration(object):
 				#	Defaults for TimeSyncBeacon Resources
 				#
 
-				'cse.tsb.bcni'							: config.getint('cse.resource.tsb', 'bcni', 			fallback = 3600),	# seconds
-				'cse.tsb.bcnt'							: config.getint('cse.resource.tsb', 'bcnt', 			fallback = 60),		# seconds
+				'cse.tsb.bcni'							: config.get('cse.resource.tsb', 'bcni', 				fallback = 'PT1H'),	# duration
+				'cse.tsb.bcnt'							: config.getfloat('cse.resource.tsb', 'bcnt', 			fallback = 60.0),	# seconds
 
 
 				#
@@ -386,6 +396,11 @@ class Configuration(object):
 				Configuration._configuration['logging.level'] = LogLevel.ERROR
 			else:
 				Configuration._configuration['logging.level'] = LogLevel.DEBUG
+		
+		# Test for correct logging queue size
+		if (queueSize := Configuration._configuration['logging.queueSize']) < 0:
+			return False, f'Configuration Error: \[logging]:queueSize must be 0 or greater'
+
 
 		if Configuration._argsDBReset is True:					Configuration._configuration['db.resetOnStartup'] = True									# Override DB reset from command line
 		if Configuration._argsDBStorageMode is not None:		Configuration._configuration['db.inMemory'] = Configuration._argsDBStorageMode == 'memory'					# Override DB storage mode from command line
@@ -424,6 +439,15 @@ class Configuration(object):
 			# if Configuration._configuration['cse.registrar.address'].startswith('https:'):
 			# 	_print('[orange3]Configuration Warning: Changing "https" to "http" in \[cse.registrar]:address')
 			# 	Configuration._configuration['cse.registrar.address'] = Configuration._configuration['cse.registrar.address'].replace('https:', 'http:')
+
+
+		# Operation
+		if Configuration._configuration['cse.operation.jobBalanceTarget'] <= 0.0:
+			return False, f'Configuration Error: \[cse.operation]:jobBalanceTarget must be > 0.0'
+		if Configuration._configuration['cse.operation.jobBalanceLatency'] < 0:
+			return False, f'Configuration Error: \[cse.operation]:jobBalanceLatency must be >= 0'
+		if Configuration._configuration['cse.operation.jobBalanceReduceFactor'] < 1.0:
+			return False, f'Configuration Error: \[cse.operation]:jobBalanceReduceFactor must be >= 1.0'
 
 
 		#
@@ -485,8 +509,8 @@ class Configuration(object):
 			return False, 'Configuration Error: \[cse]:releaseVersion must not be empty'
 		if rvi not in srv:
 			return False, f'Configuration Error: \[cse]:releaseVersion: {rvi} not in \[cse].supportedReleaseVersions: {srv}'
-		if any([s for s in srv if str(rvi) < s]):
-			return False, f'Configuration Error: \[cse]:releaseVersion: {rvi} less than highest value in \[cse].supportedReleaseVersions: {srv}'
+		# if any([s for s in srv if str(rvi) < s]):
+		#	return False, f'Configuration Error: \[cse]:releaseVersion: {rvi} less than highest value in \[cse].supportedReleaseVersions: {srv}. Either increase the [i]releaseVersion[/i] or reduce the set of [i]supportedReleaseVersions[/i].'
 
 		# Check various intervals
 		if Configuration._configuration['cse.checkExpirationsInterval'] <= 0:
@@ -516,6 +540,13 @@ class Configuration(object):
 				if not os.path.isdir(each):
 					return False, f'Configuration Error: \[cse.scripting]:scriptDirectory : directory "{each}" does not exist, is not a directory or is not accessible'
 
+		# TimeSyncBeacon defaults
+		bcni = Configuration._configuration['cse.tsb.bcni']
+		try:
+			isodate.parse_duration(bcni)
+		except Exception as e:
+			return False, f'Configuration Error: \[cse.resource.tsb]:bcni : configuration value must be an ISO8601 duration'
+		
 		# Everything is fine
 		return True, None
 
@@ -623,9 +654,10 @@ class Configuration(object):
 
 	@staticmethod
 	def _buildUserConfigFile(configFile:str) -> bool:
-		from ..etc import Utils, DateUtils
+		from ..etc import Utils
 
 		cseType = 'IN'
+		cseEnvironment = 'Development'
 
 		def _isValidateIpAddress(ip:str) -> bool:
 			try:
@@ -714,16 +746,16 @@ class Configuration(object):
 					{	'type': 'rawlist',
 						'message': 'Log level:',
 						'long_instruction': 'Set the logging verbosity',
-						"choices": lambda x: [ 'debug', 'info', 'warning', 'error', 'off' ],
-						'default': 1,
+						"choices": lambda _: [ 'debug', 'info', 'warning', 'error', 'off' ],
+						'default': 1 if cseEnvironment == 'Development' else 3,
 						'name': 'logLevel',
 						'amark': '✓',
 					},
 					{	'type': 'rawlist',
 						'message': 'Database location:',
 						'long_instruction': 'Store data in memory (volatile) or on disk (persistent).',
-						'default': 2,
-						"choices": lambda x: [ 'memory', 'disk' ],
+						"choices": lambda _: [ 'memory', 'disk' ],
+						'default': 1 if cseEnvironment == 'Development' else 2,
 						"filter": lambda result: str(result == 'memory'),
 						'name': 'databaseInMemory',
 						'amark': '✓',
@@ -772,37 +804,33 @@ class Configuration(object):
 			)
 
 		Console().clear()
-
-		# Header for the configuration
-		# Split it into a header and configuration. 
-		# Also easier to print with rich and the [...]'s
-		cnfheader = [
-				f'; {configFile}',
-				';',
-				'; Simplified configuration file for the [ACME] CSE',
-				';',
-				f'; created: {datetime.now().isoformat(" ", "seconds")}',
-				'',
-				'[basic.config]',
-		]
 		cnf:list[str] = []
 
 		try:
 			Configuration._print(f'[b]Creating a new [/b]{C.textLogo}[b] configuration file\n')
 
 			# Get the CSE Type first
-			questionsCseType = [
+			questionsStart = [
 				{	"type": "rawlist",
 					"message": "What type of CSE do you want to run:",
 					'long_instruction': 'Type of CSE to run: Infrastructure, Middle, or Application Service Node.',
 					"default": 1,
-					"choices": lambda x: [ 'IN', 'MN', 'ASN' ],
+					"choices": lambda _: [ 'IN', 'MN', 'ASN' ],
 					"name": "cseType",
+					'amark': '✓',
+				},
+				{	"type": "rawlist",
+					"message": "Target environment:",
+					'long_instruction': 'Run the CSE for development and testing, or a demonstration.',
+					"default": 1,
+					"choices": lambda _: [ 'Development', 'Demonstration' ],
+					"name": "cseEnvironment",
 					'amark': '✓',
 				}
 			]
-			t = prompt(questionsCseType)
+			t = prompt(questionsStart)
 			cseType = t['cseType']
+			cseEnvironment = t['cseEnvironment']
 			cnf.append(f'cseType={cseType}')
 		
 			# Prompt for the basic configuration
@@ -814,10 +842,35 @@ class Configuration(object):
 				for each in (bc := registrarConfig()):
 					cnf.append(f'{each}={bc[each]}')
 
+			# Header for the configuration
+			# Split it into a header and configuration. 
+			# Also easier to print with rich and the [...]'s
+			cnfheader = [
+					f'; {configFile}',
+					';',
+					'; Simplified configuration file for the [ACME] CSE',
+					';',
+					f'; created: {datetime.now().isoformat(" ", "seconds")}',
+					';',
+					f'; CSE type: {cseType}',
+					f'; Environment: {cseEnvironment}',
+					';',
+					'',
+					'',
+			]
+		
+			# Construct the configuration
+			jcnf = '[basic.config]\n' + '\n'.join(cnf)
+			if cseEnvironment == 'Development':	# add more configurations for development
+				jcnf += '\n\n'\
+						'[server.http]\n'\
+						'enableUpperTesterEndpoint=true\n'\
+						'enableStructureEndpoint=true\n'
+			
 			# Show configuration and confirm write
 			Configuration._print('\n[b]Save configuration\n')
-			jcnf = "\n".join(cnf)
-			Configuration._print(f'[dim]{jcnf}\n')
+			_jcnf = jcnf.replace("[", "\[")
+			Configuration._print(f'[dim]{_jcnf}\n')
 
 			if not inquirer.confirm(message = f'Write configuration to file {configFile}?', amark = '✓', default = True).execute():
 				Configuration._print('\n[red]Configuration canceled\n')
@@ -830,8 +883,7 @@ class Configuration(object):
 		try:
 			with open(configFile, 'w') as file:
 				file.write('\n'.join(cnfheader))
-				file.write('\n')
-				file.write('\n'.join(cnf))
+				file.write(jcnf)
 		except Exception as e:
 			Configuration._print(str(e))
 			return False

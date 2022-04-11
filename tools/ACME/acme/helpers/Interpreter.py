@@ -7,32 +7,37 @@
 #	Implementation of a simple batch command processor.
 #
 
-"""	The interpreter implements an extensible script runtime.
+"""	The interpreter module implements an extensible scripting and batch runtime.
 """
 
 from __future__ import annotations
 from dataclasses import dataclass, field
 from collections import namedtuple
 from enum import IntEnum, auto
-import datetime, time, re, copy, random
-from signal import SIG_DFL
-from typing import 	Any, Callable, Dict, Tuple, Union
+from decimal import Decimal, InvalidOperation
+import datetime, time, re, copy, random, shlex, operator
+from typing import 	Callable, Dict, Tuple, Union
 
-_maxProcStackSize = 64	# max number of calls to procedures
-
-# return with return value. result in pcontext?
+_maxProcStackSize = 64	
+""" Max number of recursive procedures calls. """
 
 class PState(IntEnum):
-	"""	The states of a process/batch.
+	"""	The internal states of a script.
 	"""
 	created 				= auto()
+	"""	Script has been created. """
 	ready 					= auto()
+	"""	Script is read to run. """
 	running 				= auto()
+	""" Script is running. """
 	canceled 				= auto()
+	""" Running of the script is canceled externally. """
 	terminated 				= auto()
+	"""	Script terminated normally. """
 	terminatedWithResult	= auto()
+	""" Script terminated normally with a result. """
 	terminatedWithError 	= auto()
-	invalid					= auto()
+	""" Script terminated with an error. """
 
 
 class PError(IntEnum): 
@@ -47,13 +52,11 @@ class PError(IntEnum):
 	nestedProcedure			= auto()
 	noError 				= auto()
 	notANumber				= auto()
-	procedureWithoutEnd		= auto()
 	quitWithError			= auto()
 	timeout					= auto()
 	undefined				= auto()
 	unexpectedArgument		= auto()
 	unexpectedCommand		= auto()
-	unknown 				= auto()
 
 
 @dataclass
@@ -76,28 +79,30 @@ class PContext():
 
 	def __init__(self, 
 				 script:Union[str,list[str]],
-				 commands:PCmdDict 			= None,
-				 macros:PMacroDict 			= None,
-				 logFunc:PLogCallable 		= lambda pcontext, msg: print(f'** {msg}'),
-				 logErrorFunc:PLogCallable	= lambda pcontext, msg: print(f'!! {msg}'),
-				 printFunc:PLogCallable 	= lambda pcontext, msg: print(msg),
-				 preFunc:PFuncCallable		= None,
-				 postFunc:PFuncCallable		= None,
-			 	 errorFunc:PFuncCallable	= None,
-				 maxRuntime:float			= None) -> None:
+				 commands:PCmdDict 				= None,
+				 macros:PMacroDict 				= None,
+				 logFunc:PLogCallable 			= lambda pcontext, msg: print(f'** {msg}'),
+				 logErrorFunc:PErrorLogCallable	= lambda pcontext, msg, exception: print(f'!! {msg}'),
+				 printFunc:PLogCallable 		= lambda pcontext, msg: print(msg),
+				 preFunc:PFuncCallable			= None,
+				 postFunc:PFuncCallable			= None,
+			 	 errorFunc:PFuncCallable		= None,
+				 matchFunc:PMatchCallable		= lambda pcontext, l, r: l == r,
+				 maxRuntime:float				= None) -> None:
 		"""	Initialize the process context.
 
 			Args:
-				script: a single \\n-seprated string, or a list of strings.
-				commands: optional list of additional commands and their callbacks.
-				macros: optional list of additional commands and their callbacks.
-				logFunc: optional callback for log messages (and the LOG command).
-				logErrorFunc: optional callback for error log messages (and the ERROR command).
-				printFunc: optional callback for PRINT command messages.
-				preFunc: optional callback that is called with the PContext object just before the script is executed. Returning *None* prevents the script execution.
-				postFunc: optional callback that is called with the PContext object just after the script finished execution.
-				errorFunc: optional callback that is called with the PContext object when encountering an error during script execution.
-				maxRuntime: optional limitation for script runtime
+				script: A single \\n-seprated string, or a list of strings.
+				commands: An optional list of additional commands and their callbacks.
+				macros: An optional list of additional commands and their callbacks.
+				logFunc: An optional callback for log messages (and the LOG command). The default is the normal print() function.
+				logErrorFunc: An optional callback for error log messages (and the ERROR command). The default is the normal print() function.
+				printFunc: An optional callback for PRINT command messages. The default is the normal print() function.
+				preFunc: An optional callback that is called with the PContext object just before the script is executed. Returning *None* prevents the script execution.
+				postFunc: An optional callback that is called with the PContext object just after the script finished execution.
+				errorFunc: An optional callback that is called with the PContext object when encountering an error during script execution.
+				matchFunc: An optional callback that is called to perform matches. This could be, for example, a regex matcher. The default is just a normal compare for equality.
+				maxRuntime: An optional limitation for script runtime in seconds.
 		"""
 		
 		# Extra parameters that can be provided
@@ -110,24 +115,26 @@ class PContext():
 		self.preFunc						= preFunc
 		self.postFunc						= postFunc
 		self.errorFunc						= errorFunc
+		self.matchFunc						= matchFunc
 		self.maxRuntime						= maxRuntime
 
 		# State, result and error attributes
 		self.pc:int 						= 0
 		self.state:PState 					= PState.created
-		self.error:PErrorState				= PErrorState(PError.noError, 0, '' )
+		self.error:PErrorState				= PErrorState(PError.noError, 0, '', None )
 		self.meta:Dict[str, str]			= {}
 		self.variables:Dict[str,str]		= {}
 		self.environment:Dict[str,str]		= {}	# Similar to variables, but not cleared
 		self.runs:int						= 0
 
-		# Internal attributes that should not be accessed
+		# Internal attributes that should not be accessed from extern
 		self._length:int					= 0
 		self._maxRTimestamp:float			= None
 		self._scopeStack:list[PScope]		= []
 		self._commands:PCmdDict				= None		# builtins + provided commands
 		self._macros:PMacroDict				= None		# builtins + provided macros
 		self._verbose:bool					= None		# Store the runtime verbosity of the run() function
+		self._line:str						= ''		# Currently executed line
 
 		#
 		# Further initializations and copying of context information
@@ -191,7 +198,7 @@ class PContext():
 				Boolean that indicates the validation status.
 		"""
 		while (line := self.nextLine):
-			if line.startswith('${'):
+			if line.startswith('['):
 				self.setError(PError.invalid, f'Macros and variables are not allowed as command: {line}')
 				return False
 		return True
@@ -215,6 +222,7 @@ class PContext():
 			# Only return not-empty lines and no comments 			
 			if line and not self.ignoreLine(line):
 				break
+		self._line = line
 		return line
 	
 
@@ -238,8 +246,8 @@ class PContext():
 			separated with \\n.
 
 			Args:
-				prefix: If `prefix` is given then it is added to the begining of the result.
-				upto:  If `upto` is given then only the lines up to the first line that starts with `upto` are returned.
+				prefix: If *prefix* is given then it is added to the begining of the result.
+				upto:  If *upto* is given then only the lines up to the first line that starts with *upto* are returned.
 				ignoreComments: If set to True then comment lines are not included in the result.
 			Return:
 				String with all the remaining lines in a single string.
@@ -264,11 +272,13 @@ class PContext():
 	
 
 	def ignoreLine(self, line:str) -> bool:
-		"""	Test whether a line should be ignored, e.g. a comment (ie. the line starts with # or //), 
-			or meta data (ie, the line starts with @). White spaces before the characters are ignored.
+		"""	Test whether a line should be ignored.
+		
+			For example a comment (ie. the line starts with # or //), or meta data (ie, the line starts with @). 
+			White spaces before the characters are ignored.
 
 			Args:
-				line: The line to test
+				line: The line to test.
 			Return:
 				Boolean indicating whether a line shall be ignored.
 		"""
@@ -276,29 +286,33 @@ class PContext():
 	
 
 	def reset(self) -> None:
-		"""	Reset the context / script. May also be implemented in a sub-class, but the must then call this
-			method as well.
+		"""	Reset the context / script. 
+		
+			
+			This methoth ,ay also be implemented in a sub-class, but the must then call this method as well.
 		"""
 		self.pc = 0
-		self.error = PErrorState(PError.noError, 0, '')
+		self.error = PErrorState(PError.noError, 0, '', None)
 		self.variables.clear()
 		self._scopeStack.clear()
 		self.saveScope(pc = -1, name = self.meta.get('name'))
 		self.state = PState.ready
 
 
-	def setError(self, error:PError, msg:str, pc:int = -1, state:PState = PState.terminatedWithError) -> None:
-		"""	Set the internal state and error codes. These can be retrieved by accessing the state and error
-			attributes.
+	def setError(self, error:PError, msg:str, pc:int = -1, state:PState = PState.terminatedWithError, exception:Exception = None) -> None:
+		"""	Set the internal state and error codes. 
+		
+			These can be retrieved by accessing the state and error	attributes.
 
 			Args:
 				error: PError to indicate the type of error.
 				msg: String that further explains the error.
 				pc: Integer, the program counter pointing at the line causing the error. Default -1 means the current pc.
 				state: PState to indicate the state of the script. Default is "terminatedWithError".
+				exception: Optional exception to provide with the error message.
 		"""
 		self.state = state
-		self.error = PErrorState(error, self.pc if pc == -1 else pc, msg)
+		self.error = PErrorState(error, self.pc if pc == -1 else pc, msg, exception)
 
 
 	@property
@@ -472,7 +486,7 @@ class PContext():
 		return 0
 	
 
-	def whileLoopCounter(self, line:str) -> int:
+	def whileLoopCounter(self) -> int:
 		"""	Return the latest loop counter for a while loop.
 
 			Args:
@@ -485,9 +499,15 @@ class PContext():
 		# is not yet set. This is while we need to check the program counter instead, and return a 0 as a default
 		# if nothing has been assigned yet. Otherwise this would return the loop counter for that while.
 		# If the line isn't a "while ..." then we can savely return the normal loop counter for the while.
+		line = self._line
 		if line.lower().startswith('while'):
 			return self.scope.whileLoop.get(self.pc - 1, 0)
-		return self.scope.whileLoop.get(self.whilePc)
+		if (loop := self.scope.whileLoop.get(self.whilePc)) is None:
+			self.setError(PError.undefined, f'Undefined variable: loop')
+			return None
+		return loop
+
+
 
 
 	@property
@@ -495,7 +515,7 @@ class PContext():
 		"""	Return the latest saved program counter for a while loop.
 
 			Return:
-				Integer, the program counter that points to the top of the current while scope.
+				Integer, the program counter that points to the top of the current while scope, or *None* when the whileStack is empty.
 		"""
 		if not self.scope.whileStack:
 			return None
@@ -647,6 +667,10 @@ PLogCallable = Callable[[PContext, str], None]
 """	Function callback for log functions.
 """
 
+PErrorLogCallable = Callable[[PContext, str, Exception], None]
+"""	Function callback for error og functions.
+"""
+
 PCmdCallable = Callable[[PContext, str], PContext]
 """	Signature of a command callable.
 """
@@ -660,12 +684,17 @@ PMacroCallable = Callable[[PContext, str, str], str]
 """	Signature of a macro callable.
 """
 
+PMatchCallable = Callable[[PContext, str, str], bool]
+"""	Signature of a match function callable.
+"""
+
+
 PMacroDict = Dict[str, PMacroCallable]
 """	Function callback for macros. The callback is called with a `PContext` object
 	and returns a string.
 """
 
-PErrorState = namedtuple('PErrorState', [ 'error', 'line', 'message' ])
+PErrorState = namedtuple('PErrorState', [ 'error', 'line', 'message', 'exception' ])
 """	Named tuple that represents an error state. The error, the line numer,
 	and the error message.
 """
@@ -677,12 +706,12 @@ PErrorState = namedtuple('PErrorState', [ 'error', 'line', 'message' ])
 #
 
 def run(pcontext:PContext, verbose:bool = False, argument:str = '', procedure:str = None) -> PContext:
-	"""	Run a script. An own, extended `contextClass` can be provided, that supports the `extraCommands`.
+	"""	Run a script. An own, extended `PContext` instance can be provided, that supports  extra commands and macros.
 
 		Args:
 			pcontext: Current PContext for the script.
 			verbose: Log each executed line.
-			argument: The argument to the script, available via the `argv` macro.
+			argument: The argument to the script, available via the *argv* macro.
 		Return:
 			PContext object, or None in case of an error.
 		"""
@@ -695,7 +724,7 @@ def run(pcontext:PContext, verbose:bool = False, argument:str = '', procedure:st
 				pcontext: Current PContext for the script.
 		"""
 		if pcontext.error.error not in [ PError.noError, PError.quitWithError ]:
-			_doLog(pcontext, f'{pcontext.error.line}: {pcontext.error.message}', isError = True)
+			_doLog(pcontext, f'{pcontext.error.line}: {pcontext.error.message}', isError = True, exception = pcontext.error.exception)
 			if pcontext.errorFunc:
 				pcontext.errorFunc(pcontext)
 		if pcontext.state != PState.ready and pcontext.postFunc:	# only when really running, after preFunc succeeded
@@ -768,8 +797,10 @@ def run(pcontext:PContext, verbose:bool = False, argument:str = '', procedure:st
 						pcontext = result
 					else:
 						pcontext.state = PState.terminatedWithError
+				except SystemExit:
+					raise
 				except Exception as e:
-					pcontext.setError(PError.unknown, f'Error: {e}')
+					pcontext.setError(PError.invalid, f'Error: {e}', exception = e)
 			else:
 				# Ignore "empty" (None) commands
 				pass
@@ -788,12 +819,34 @@ def run(pcontext:PContext, verbose:bool = False, argument:str = '', procedure:st
 	if pcontext.state not in endScriptStates:
 		# Check whether we reached the end of the script, but haven't ended a procedure
 		if len(pcontext._scopeStack) > 1:
-			pcontext.setError(PError.procedureWithoutEnd, f'PROCEDURE without return', pcontext.scope.returnPc )
+			pcontext.setError(PError.unexpectedCommand, f'PROCEDURE without return', pcontext.scope.returnPc )
+		elif pcontext.whilePc is not None:
+			pcontext.setError(PError.unexpectedCommand, f'WHILE without ENDWHILE', pcontext.scope.returnPc )
 
 	# Return after running. Set the pcontext.state accordingly
 	pcontext.state = PState.terminated if pcontext.state == PState.running else pcontext.state
 	_terminating(pcontext)
 	return pcontext
+
+
+##############################################################################
+#
+#	Extra utility functions
+#
+
+def tokenize(line:str) -> list[str]:
+	"""	Tokenize an input string.
+
+		This function tokenizes a string like a shell command line. It takes quoted
+		arguments etc into account.
+
+		Args:
+			line: String with arguments, possibly quoted.
+		Return:
+			List of tokens / arguments.
+	"""
+	return shlex.split(line)
+
 
 ##############################################################################
 #
@@ -809,7 +862,7 @@ def _doAssert(pcontext:PContext, arg:str) -> PContext:
 		Return:
 			The PContext object, or None in case of an error.
 	"""
-	if (result := _compareExpression(pcontext, arg)) is None:
+	if (result := _boolResult(pcontext, arg)) is None:
 		return None
 	if not result:
 		pcontext.setError(PError.assertionFailed, f'Assertion failed: {arg}')
@@ -1002,7 +1055,7 @@ def _doIf(pcontext:PContext, arg:str) -> PContext:
 			PContext object, or None in case of an error.
 	"""
 	pcontext.ifLevel += 1
-	if (result := _compareExpression(pcontext, arg)) is None:
+	if (result := _boolResult(pcontext, arg)) is None:
 		return None
 	if not result:
 		# Skip to else or endif if False(!).
@@ -1027,15 +1080,15 @@ def _doIncDec(pcontext:PContext, arg:str, isInc:bool = True) -> PContext:
 		pcontext.setError(PError.undefined, f'undefined variable: {var}')
 		return None
 	try:
-		n = float(value) if len(value) > 0 else 1.0	# either a number or 1.0 (default)
-		pcontext.setVariable(var, str(float(variable) + n) if isInc else str(float(variable) - n))
-	except ValueError as e:
+		n = Decimal(value) if len(value) > 0 else Decimal(1.0)	# either a number or 1.0 (default)
+		pcontext.setVariable(var, str(Decimal(variable) + n) if isInc else str(Decimal(variable) - n))
+	except InvalidOperation as e:
 		pcontext.setError(PError.notANumber, f'Not a number: {e}')
 		return None
 	return pcontext
 
 
-def _doLog(pcontext:PContext, arg:str, isError:bool = False) -> PContext:
+def _doLog(pcontext:PContext, arg:str, isError:bool = False, exception:Exception = None) -> PContext:
 	"""	Print a message to the debug or to the error. Either the internal or a provided log function.
 
 		Args:
@@ -1047,7 +1100,7 @@ def _doLog(pcontext:PContext, arg:str, isError:bool = False) -> PContext:
 	"""
 	if isError:
 		if pcontext.logErrorFunc:
-			pcontext.logErrorFunc(pcontext, arg)
+			pcontext.logErrorFunc(pcontext, arg, exception)
 	else:
 		if pcontext.logFunc:
 			pcontext.logFunc(pcontext, arg)
@@ -1075,7 +1128,7 @@ def _doProcedure(pcontext:PContext, arg:str) -> PContext:
 		if cmd == 'endprocedure':
 			return pcontext
 	# Reached end of script
-	pcontext.setError(PError.procedureWithoutEnd, 'PROCEDURE without ENDPROCEDURE')
+	pcontext.setError(PError.unexpectedCommand, 'PROCEDURE without ENDPROCEDURE')
 	return None
 
 
@@ -1128,26 +1181,26 @@ def _doSet(pcontext:PContext, arg:str) -> PContext:
 
 
 	# Check whether this is an expression asignment
-	var, found, value = arg.partition('=')
-	if found:	# = means assignment
-		var = var.strip()
-		value = value.strip()
+	# var, found, value = arg.partition('=')
+	# if found:	# = means assignment
+	# 	var = var.strip()
+	# 	value = value.strip()
 
-		# Test for overwrite macro
-		if not testMacro(var):
-			return None
+	# 	# Test for overwrite macro
+	# 	if not testMacro(var):
+	# 		return None
 
-		try:
-			if (result := str(_calcExpression(pcontext, value))) is None:
-				return None
-		except ValueError as e:
-			pcontext.setError(PError.notANumber, f'Not a number: {e}')
-			return None
-		except ZeroDivisionError as e:
-			pcontext.setError(PError.divisionByZero, f'Division by zero: {arg}')
-			return None
-		pcontext.setVariable(var, str(result))
-		return pcontext
+	# 	try:
+	# 		if (result := str(_calcExpression(pcontext, value))) is None:
+	# 			return None
+	# 	except ConversionSyntax as e:
+	# 		pcontext.setError(PError.notANumber, f'Not a number: {e}')
+	# 		return None
+	# 	except ZeroDivisionError as e:
+	# 		pcontext.setError(PError.divisionByZero, f'Division by zero: {arg}')
+	# 		return None
+	# 	pcontext.setVariable(var, str(result))
+	# 	return pcontext
 
 	# Else: normal assignment
 	var, _, value = arg.partition(' ')
@@ -1170,8 +1223,9 @@ def _doSet(pcontext:PContext, arg:str) -> PContext:
 
 
 def _doSleep(pcontext:PContext, arg:str) -> PContext:
-	"""	Sleep for `arg` seconds. This command can be interrupted when the
-		script's state is set to `canceled`.
+	"""	Sleep for a number of seconds. 
+	
+		This command can be interrupted when the script's state is set to *canceled*.
 
 		Args:
 			pcontext: Current PContext for the script.
@@ -1193,7 +1247,9 @@ def _doSleep(pcontext:PContext, arg:str) -> PContext:
 
 
 def _doSwitch(pcontext:PContext, arg:str) -> PContext:
-	"""	Start a SWITCH block. SWITCH blocks might be nested.
+	"""	Start a SWITCH block. 
+	
+		SWITCH blocks might be nested.
 
 		Args:
 			pcontext: Current PContext for the script.
@@ -1202,8 +1258,7 @@ def _doSwitch(pcontext:PContext, arg:str) -> PContext:
 			Current PContext object, or None in case of an error.
 	"""
 	if not arg:
-		pcontext.setError(PError.invalid, 'SWITCH without argument')
-		return None
+		arg = 'true'
 	pcontext.switchLevel += 1
 	return _skipSwitch(pcontext, arg)	# Skip to the correct switch block
 
@@ -1221,7 +1276,7 @@ def _doWhile(pcontext:PContext, arg:str) -> PContext:
 	if wpc is None or wpc != pcontext.pc:	# Only put this while on the stack if we just run into it for the first time
 		pcontext.saveWhileState()
 		pcontext.addWhileLoop()
-	if (result := _compareExpression(pcontext, arg)) is None:
+	if (result := _boolResult(pcontext, arg)) is None:
 		return None
 	if not result:
 		# Skip to endwhile if False(!).
@@ -1235,13 +1290,43 @@ def _doWhile(pcontext:PContext, arg:str) -> PContext:
 #	Build-in Macros
 #
 
+def _doAnd(pcontext:PContext, arg:str, line:str) -> str:
+	"""	With the *and* macro one can evaluate boolean expressions and combine them with a boolean "and".
 
-def _doArgv(pcontext:PContext, arg:str, line:str) -> str:
-	"""	With the `argv` macro one can access the individual arguments of a script.
+		The *and* macro will evaluate to *true* (all boolean expressions are true) or *false* 
+		(one or many boolean expressions are false). 
 
 		Example:
 
-			${argv [<index>]}
+			[and <expression>+]
+
+		There must be at least one expression result as an argument.
+
+		Args:
+			pcontext: Current PContext for the script.
+			arg: The results of one or many boolean expressions.
+			line: The original code line.
+		Return:
+			String with either *false* or *false*, or None in case of an error.
+	"""
+	if len(args := tokenize(arg)) == 0:
+		pcontext.setError(PError.invalid, f'Wrong number of arguments for and: {len(args)}. Must be >= 1.')
+		return None
+	for each in args:
+		if (l := each.lower()) not in ['true', 'false']:
+			pcontext.setError(PError.invalid, f'Invalid boolean value for and: {l}. Must be true or false.')
+			return None
+		if l != 'true':
+			return 'false'
+	return 'true'
+
+
+def _doArgv(pcontext:PContext, arg:str, line:str) -> str:
+	"""	With the *argv* macro one can access the individual arguments of a script.
+
+		Example:
+
+			[argv [<index>] ]
 
 		- Without an index argument this macro returns the whole argument.
 		- If the index is 0 then script name is returned.
@@ -1264,7 +1349,7 @@ def _doArgv(pcontext:PContext, arg:str, line:str) -> str:
 		if i == 0:	# Traditionally argv[0] is the program name
 			return pcontext.name if pcontext.name else ''	
 		if pcontext.argument:
-			args = pcontext.argument.split()
+			args = tokenize(pcontext.argument)
 			if 0 < i <= len(args):
 				return args[i-1]
 			return None
@@ -1284,9 +1369,103 @@ def _doArgc(pcontext:PContext, arg:str, line:str) -> str:
 			String, or None in case of an error.
 	"""
 	if pcontext.argument:
-		return str(len(pcontext.argument.split()))
+		return str(len(tokenize(pcontext.argument)))
 	return '0'
 
+
+def _doIn(pcontext:PContext, arg:str, line:str) -> str:
+	"""	With the *in* macro one can test whether a string can be found in another string.
+
+		Example:
+
+			[in <text> <string>]
+
+		Args:
+			pcontext: Current PContext for the script.
+			arg: Two arguments: The first is the text to look for in the second argument.
+			line: The original code line.
+		Return:
+			String with either *false* or *false*, or None in case of an error.
+	"""
+	if len(args := tokenize(arg)) == 0:
+		pcontext.setError(PError.invalid, f'Wrong number of arguments for in: {len(args)}. Must be == 2.')
+		return None
+	return str(args[0] in args[1]).lower()
+
+
+def _doMatch(pcontext:PContext, arg:str, line:str) -> str:
+	"""	This macro returns the result of a match comparison.
+
+		Args:
+			pcontext: Current PContext for the script.
+			arg: Not used.
+			line: Not used.
+		Return:
+			String with *true* or *false*, or None in case of an error.
+	"""
+	if len(args := tokenize(arg)) == 2:
+		return str(pcontext.matchFunc(pcontext, args[0], args[1])).lower()
+	pcontext.setError(PError.invalid, f'Wrong number of arguments for match: {len(args)}. Must be 2.')
+	return None
+
+
+def _doNot(pcontext:PContext, arg:str, line:str) -> str:
+	"""	With the *not* macro one can invert the result of a boolean expressions.
+
+		The *nor* macro will evaluate to *true* if the argument is *false*, and to *false* 
+		if the argument is *true*.
+
+		Example:
+
+		[not <expression>]
+
+		There must be exactly one expression result as an argument.
+
+		Args:
+			pcontext: Current PContext for the script.
+			arg: The results of one or many boolean expressions.
+			line: The original code line.
+		Return:
+			String with either *false* or *false*, or None in case of an error.
+	"""
+	if len(args := tokenize(arg)) != 1:
+		pcontext.setError(PError.invalid, f'Wrong number of arguments for not: {len(args)}. Must be == 1.')
+		return None
+	if (l := args[0].lower()) not in ['true', 'false']:
+		pcontext.setError(PError.invalid, f'Invalid boolean value for or: {len(args)}. Must be true or false.')
+		return None
+	return 'false' if l == 'true' else 'true'
+
+
+def _doOr(pcontext:PContext, arg:str, line:str) -> str:
+	"""	With the *or* macro one can evaluate boolean expressions and combine them with a boolean "or".
+
+		The *or* macro will evaluate to *true* (at least one boolean expressions is true) or *false* 
+		(none of the boolean expressions is true). 
+
+		Example:
+
+			[or <expression>+]
+
+		There must be at least one expression result as an argument.
+
+		Args:
+			pcontext: Current PContext for the script.
+			arg: The results of one or many boolean expressions.
+			line: The original code line.
+		Return:
+			String with either *false* or *false*, or None in case of an error.
+	"""
+	if len(args := tokenize(arg)) == 0:
+		pcontext.setError(PError.invalid, f'Wrong number of arguments for or: {len(args)}. Must be >= 1.')
+		return None
+	for each in args:
+		if (l := each.lower()) not in ['true', 'false']:
+			pcontext.setError(PError.invalid, f'Invalid boolean value for or: {l}. Must be true or false.')
+			return None
+		if l == 'true':
+			return 'true'
+	return 'false'
 
 
 def _doRandom(pcontext:PContext, arg:str, line:str) -> str:
@@ -1308,7 +1487,7 @@ def _doRandom(pcontext:PContext, arg:str, line:str) -> str:
 		start = 0.0
 		end = 1.0
 		if arg:
-			args = arg.split()
+			args = tokenize(arg)
 			if len(args) == 1:
 				end = float(args[0])
 			elif len(args) == 2:
@@ -1324,8 +1503,9 @@ def _doRandom(pcontext:PContext, arg:str, line:str) -> str:
 
 
 def _doRound(pcontext:PContext, arg:str, line:str) -> str:
-	"""	Return a number rounded to optional `ndigits` precision after the decimal point. If `ndigits` is omitted,
-		it returns the nearest integer.
+	"""	Return a number rounded to optional *ndigits* precision after the decimal point. 
+	
+		If *ndigits*, the second parameter, is omitted, it returns the nearest integer.
 
 		Examples:
 			- round 1.6 -> 2
@@ -1338,20 +1518,19 @@ def _doRound(pcontext:PContext, arg:str, line:str) -> str:
 			String, or None in case of an error.
 	"""
 	try:
-		number = 0.0
+		number = Decimal(0.0)
 		ndigits = None
 		if arg:
-			args = arg.split()
-			if len(args) == 1:
-				number = float(args[0])
+			if len(args := tokenize(arg)) == 1:
+				number = Decimal(args[0])
 			elif len(args) == 2:
-				number = float(args[0])
+				number = Decimal(args[0])
 				ndigits = int(args[1])
 			else:
 				pcontext.setError(PError.invalid, f'Wrong number of arguments for round: {len(args)}')
 				return None
 		return str(round(number, ndigits))
-	except ValueError as e:
+	except (InvalidOperation, ValueError) as e:
 		pcontext.setError(PError.notANumber, f'Not a number: {e}')
 		return None
 
@@ -1371,7 +1550,6 @@ _builtinCommands:PCmdDict = {
 	'endprocedure':	_doEndProcedure,
 	'endswitch':	_doEndSwitch,
 	'endwhile':		_doEndWhile,
-	'error':		_doError,
 	'if':			_doIf,
 	'inc':			lambda p, a : _doIncDec(p, a),
 	'log':			lambda p, a : _doLog(p, a,),
@@ -1379,6 +1557,7 @@ _builtinCommands:PCmdDict = {
 	'print':		_doPrint,
 	'procedure':	_doProcedure,
 	'quit':			_doQuit,
+	'quitwitherror':_doError,
 	'set':			_doSet,
 	'sleep':		_doSleep,
 	'switch':		_doSwitch,
@@ -1389,16 +1568,43 @@ _builtinCommands:PCmdDict = {
 _builtinMacros:PMacroDict = {
 	# !!! macro names must be lower case
 
-	'datetime':	lambda c, a, l: datetime.datetime.utcnow().strftime('%Y%m%dT%H%M%S.%f' if not a else a),
-	'result':	lambda c, a, l: c.result,
 	'argc':		_doArgc,
 	'argv':		_doArgv,
-	'loop':	lambda c, a, l: str(c.whileLoopCounter(l)),
+	'datetime':	lambda c, a, l: datetime.datetime.utcnow().strftime('%Y%m%dT%H%M%S.%f' if not a else a),
+	'in':		_doIn,
+	'loop':		lambda c, a, l: str(x) if ((x := c.whileLoopCounter()) and x is not None) else x,	# type:ignore [dict-item, return-value]
 	'lower':	lambda c, a, l: a.lower(),
+	'match':	_doMatch,
 	'random':	_doRandom,
+	'result':	lambda c, a, l: c.result,
 	'round':	_doRound,
 	'runcount':	lambda c, a, l: str(c.runs),
 	'upper':	lambda c, a, l: a.upper(),
+
+	# Math operators
+	'+':		lambda c, a, l: _calculate(c, a, l, operator.add),
+	'-':		lambda c, a, l: _calculate(c, a, l, operator.sub),
+	'*':		lambda c, a, l: _calculate(c, a, l, operator.mul),
+	'/':		lambda c, a, l: _calculate(c, a, l, operator.truediv),
+	'//':		lambda c, a, l: _calculate(c, a, l, operator.floordiv),
+	'**':		lambda c, a, l: _calculate(c, a, l, operator.pow),
+	'%':		lambda c, a, l: _calculate(c, a, l, operator.mod),
+	
+	# Comparisons
+	'==':		lambda c, a, l: _compare(c, a, l, operator.eq),
+	'!=':		lambda c, a, l: _compare(c, a, l, operator.ne),
+	'>':		lambda c, a, l: _compare(c, a, l, operator.gt),
+	'>=':		lambda c, a, l: _compare(c, a, l, operator.ge),
+	'<':		lambda c, a, l: _compare(c, a, l, operator.lt),
+	'<=':		lambda c, a, l: _compare(c, a, l, operator.le),
+
+	# Logical operators
+	'!':		_doNot,
+	'not':		_doNot,
+	'&&':		_doAnd,
+	'and':		_doAnd,
+	'||':		_doOr,
+	'or':		_doOr,
 }
 
 
@@ -1408,8 +1614,9 @@ _builtinMacros:PMacroDict = {
 #
 
 def checkMacros(pcontext:PContext, line:str) -> str:
-	"""	Replace all macros and variables in a line. Variables have precedence
-		over macros with the same name. Macros and variables are replaced recursively.
+	"""	Replace all macros and variables in a line. 
+	
+		Variables have precedence over macros with the same name. Macros and variables are replaced recursively.
 
 		Args:
 			pcontext: Current PContext for the script.
@@ -1419,17 +1626,18 @@ def checkMacros(pcontext:PContext, line:str) -> str:
 	"""
 
 	def _replaceMacro(macro:str) -> str:
-		"""	Replace a single macro or variable. Do this recursively.
+		"""	Replace a single macro or variable. 
+		
+			This is done recursively.
 
 			Args:
-				macro: The name and argument of a macro. Everything between ${...}.
+				macro: The name and argument of a macro. Everything between [...].
 			Return:
 				The fully replaced macro.
 		"""
-		
 		# remove prefix & trailer
-		macro = macro[2:-1] 					
-		
+		macro = macro[1:-1] 			
+
 		# Resolve contained macros recursively
 		if (macro := checkMacros(pcontext, macro)) is None:
 			return None
@@ -1480,7 +1688,6 @@ def checkMacros(pcontext:PContext, line:str) -> str:
 		return pcontext_.result
 
 
-
 	# replace macros
 	# _macroMatch = re.compile(r"\$\{[\s\w-.]+\}")
 	# items = re.findall(_macroMatch, line)
@@ -1491,6 +1698,7 @@ def checkMacros(pcontext:PContext, line:str) -> str:
 
 	# The following might be easier with a regex, but we want to allow recursive macros, therefore
 	# parsing the string is simpler for now. Suggestions welcome!
+
 
 	i = 0
 	l = len(line)
@@ -1504,11 +1712,10 @@ def checkMacros(pcontext:PContext, line:str) -> str:
 			result += line[i]
 			i += 1
 
-		# Found ${ in the input line
-		elif c == '$' and i < l and line[i] == '{':
-			macro = '${'
-			i += 1
-			oc = 0
+		# Found [ in the input line
+		elif c == '[':
+			macro = c
+			oc = 0	# macro deep level
 			# try to find the end of the macro.
 			# Skip contained macros in between. They will be
 			# resolved recursively later
@@ -1518,14 +1725,13 @@ def checkMacros(pcontext:PContext, line:str) -> str:
 				if c == '\\' and i < l:
 					macro += line[i]
 					i += 1
-				elif c == '$' and i < l and line[i] == '{':
+				elif c == '[':
 					oc += 1
-					i += 1
-					macro += '${'
-				elif c == '}':
+					macro += '['
+				elif c == ']':
 					if oc > 0:	# Skip if not end of _this_ macro
 						oc -= 1
-						macro += '}'
+						macro += ']'
 					else:	# End of macro. Might contain other macros! Those will be resolved later
 						macro += c
 						if (r := _replaceMacro(macro)) is None:
@@ -1545,8 +1751,9 @@ def checkMacros(pcontext:PContext, line:str) -> str:
 
 
 def _skipIfElse(pcontext:PContext, isIf:bool) -> PContext:
-	"""	Skip to else or endif if `isIf` is False(!). Skip oer
-		"if", "else", or "endif" that are not part of the scope.
+	"""	Skip to else or endif if *isIf* is False(!).
+	
+		Skip over "IF", "ELSE", or "ENDIF" commands that are not part of the scope.
 
 		Args:
 			pcontext: Current PContext for the script.
@@ -1598,14 +1805,17 @@ def _skipSwitch(pcontext:PContext, compareTo:str, skip:bool = False) -> PContext
 			Current PContext object, or None in case of an error.
 	"""
 	level = 0		# level of switches
-	compareTo = compareTo.lower() if compareTo else compareTo
+	compareTo = ' '.join(tokenize(compareTo)).lower() if compareTo else 'true'
 	while pcontext.pc < pcontext._length and level >= 0:
 		cmd, _, arg, _ = pcontext.nextLinePartition()
 
 		if cmd == 'case' and not skip:	# skip all cases if we just look for the end of the switch
 			if not arg:	# default case, always matches
 				break
-			if arg == compareTo: # found comparison
+
+			# Check all macros/variables, then use the provided match function to do the comparison.
+			# This also matches any comparison against the default "true" value of the switch
+			if pcontext.matchFunc(pcontext, compareTo, checkMacros(pcontext, arg)):
 				break
 			continue			# not the right one, continue search
 		if cmd == 'endswitch':
@@ -1658,107 +1868,171 @@ def _skipWhile(pcontext:PContext) -> PContext:
 	return pcontext
 
 
-def _compareExpression(pcontext:PContext, expr:str) -> bool:
-	"""	Resolve a compare expression. boolean "true" and "false", and the
-		comparison operators ==, !=, <, <=, >, >= are supported.
+# # TODO delete
+# def _compareExpression(pcontext:PContext, expr:str) -> bool:
+# 	"""	Resolve a compare expression. boolean *true* and *false*, and the
+# 		comparison operators ==, !=, <, <=, >, >= are supported.
+
+# 		Args:
+# 			pcontext: Current PContext for the script.
+# 			expr: The compare expression.
+# 		Return:
+# 			Boolean.
+# 	"""
+# 	def _strDecimal(val:str) -> Union[Decimal, str]:
+# 		try:
+# 			return Decimal(val)	# try to unify float values
+# 		except InvalidOperation as e:
+# 			# print(str(e))
+# 			return val.strip()
+	
+# 	def _checkDecimal(l:str, r:str) -> Tuple[Decimal, Decimal]:
+# 		_l = _strDecimal(l)
+# 		_r = _strDecimal(r)
+# 		if isinstance(_l, Decimal) and isinstance(_r, Decimal):
+# 			return _l, _r
+# 		pcontext.setError(PError.invalid, f'Unknown expression: {expr}')
+# 		return None
+
+# 	# Boolean checks
+# 	if expr.lower() == 'true':
+# 		return True
+# 	if expr.lower() == 'false':
+# 		return False
+
+# 	# equality checks
+# 	if (t := expr.partition('==')) and t[1]:
+# 		return _strDecimal(t[0]) == _strDecimal(t[2])	# still convert to Decimal to convert an int to a Decimal, if necessary
+# 	if (t := expr.partition('!=')) and t[1]:
+# 		return _strDecimal(t[0]) != _strDecimal(t[2])	# still convert to Decimal to convert an int to a Decimal, if necessary
+
+# 	# order checks
+# 	if (t := expr.partition('<=')) and t[1]:
+# 		if not (lr := _checkDecimal(t[0], t[2])):	# Error set in function
+# 			return None
+# 		return lr[0] <= lr[1]
+# 	elif (t := expr.partition('>=')) and t[1]:
+# 		if not (lr := _checkDecimal(t[0], t[2])):	# Error set in function
+# 			return None
+# 		return lr[0] >= lr[1]
+# 	elif (t := expr.partition('<')) and t[1]:
+# 		if not (lr := _checkDecimal(t[0], t[2])):	# Error set in function
+# 			return None
+# 		return lr[0] < lr[1]
+# 	elif (t := expr.partition('>')) and t[1]:
+# 		if not (lr := _checkDecimal(t[0], t[2])):	# Error set in function
+# 			return None
+# 		return lr[0] > lr[1]
+# 	pcontext.setError(PError.invalid, f'Unknown expression: {expr}')
+# 	return None
+
+
+def _compare(pcontext:PContext, arg:str, line:str, op:Callable) -> str:
+	"""	Compare two arguments with a comparison operator.
+
+		If both arguments are numbers then a numeric comparison is done, other a string compare is performed.
+		The difference is that, for example, "4" > "30" when compared as a string.
 
 		Args:
 			pcontext: Current PContext for the script.
-			expr: The compare expression.
+			arg: The arguments for the compare. This string must contain two arguments.
+			line: The whole script line. Not used.
+			op: An `operator` method used for the comparison.
 		Return:
-			Boolean.
+			String with *true* or *false* depending on the result of the comparison.
 	"""
-	def _strFloat(val:str) -> Union[float, str]:
+	def _strDecimal(val:str) -> Union[Decimal, str]:
+		"""	Helper function to cast a comparable value.
+
+			Args:
+				val: The value to cast
+			Return:
+				Either a Decimal object (when the value is a number) as a string, or just a normal string.
+		"""
 		try:
-			return float(val)	# try to unify float values
-		except ValueError as e:
-			# print(str(e))
+			return Decimal(val)	# try to unify float values
+		except InvalidOperation as e:
 			return val.strip()
-	
-	def _checkFloat(l:str, r:str) -> Tuple[float, float]:
-		_l = _strFloat(l)
-		_r = _strFloat(r)
-		if isinstance(_l, float) and isinstance(_r, float):
-			return _l, _r
-		pcontext.setError(PError.unknown, f'Unknown expression: {expr}')
+
+	if len(args := tokenize(arg)) != 2:
+		pcontext.setError(PError.invalid, f'Wrong number of arguments for operation: Must be == 2.')
 		return None
+	
+	# Convert to strings if either argument is a string
+	l = _strDecimal(args[0])
+	r = _strDecimal(args[1])
+	if isinstance(l, str) or isinstance(r, str):
+		l = str(l)
+		r = str(r)
+	
+	# Compare and return
+	return str(op(l, r)).lower()
 
-	# Boolean checks
-	if expr.lower() == 'true':
+
+def _boolResult(pcontext:PContext, arg:str) -> bool:
+	"""	Test whether an argument is either *true* or *false*.
+
+		Args:
+			pcontext: Current PContext for the script.
+			arg: The argument for the compare. 
+		Return:
+			Boolean *True* or *False*, or *None* in case of an error.
+	"""
+	if arg.lower() == 'true':
 		return True
-	if expr.lower() == 'false':
+	if arg.lower() == 'false':
 		return False
-
-	# equality checks
-	if (t := expr.partition('==')) and t[1]:
-		return _strFloat(t[0]) == _strFloat(t[2])	# still convert to float to convert an int to a float, if necessary
-	if (t := expr.partition('!=')) and t[1]:
-		return _strFloat(t[0]) != _strFloat(t[2])	# still convert to float to convert an int to a float, if necessary
-
-	# order checks
-	if (t := expr.partition('<=')) and t[1]:
-		if not (lr := _checkFloat(t[0], t[2])):	# Error set in function
-			return None
-		return lr[0] <= lr[1]
-		# return strFloat(t[0]) <= strFloat(t[2])
-	elif (t := expr.partition('>=')) and t[1]:
-		if not (lr := _checkFloat(t[0], t[2])):	# Error set in function
-			return None
-		return lr[0] >= lr[1]
-		# return _strFloat(t[0]) >= _strFloat(t[2])
-	elif (t := expr.partition('<')) and t[1]:
-		if not (lr := _checkFloat(t[0], t[2])):	# Error set in function
-			return None
-		return lr[0] < lr[1]
-		# return _strFloat(t[0]) < _strFloat(t[2])
-	elif (t := expr.partition('>')) and t[1]:
-		if not (lr := _checkFloat(t[0], t[2])):	# Error set in function
-			return None
-		return lr[0] > lr[1]
-		# return _strFloat(t[0]) > _strFloat(t[2])
-	pcontext.setError(PError.unknown, f'Unknown expression: {expr}')
+	pcontext.setError(PError.invalid, f'Expression must be "true" or "false"')
 	return None
 
 
-def _calcExpression(pcontext:PContext, expr:str) -> float:
-	"""	Resolve a simple math expression. The operators +, -, *, /, % (mod), ^ are suppored.
-		The result is always a float.
+def _calculate(pcontext:PContext, arg:str, line:str, op:Callable, single:bool = False) -> str:
+	"""	Perform a arithmetic calculation.
 
+		This function performs an arithmetic operation on multiple arguments. The same
+		operation is subsequentially performed on an argument to the result of the
+		last iteration.
+
+		Example:
+			[+ 1 2 3]
+			# yields 6
 		Args:
 			pcontext: Current PContext for the script.
-			expr: The expression to calculate
+			arg: Line that contains all the arguments.
+			line: The whole script line. Not used.
+			op: An `operator` method used for the arithmetics operation.
+			single: Operation allows only one argument.
 		Return:
-			Float, the result of the calculation.
+			String with a number result of the operatio, or *None* in case of an error.
 	"""
-	expr = expr.strip()
 	
-	# The following is a hack to allow negative numbers to be used with the
-	# simple expression parser below. It just takes advantage that
-	# -n = 0 - n
-	# This way negative numbers are just a result of a calculation. 
-	# Not prestty but lazy.
-	if expr.startswith('-'):
-		expr = f'0{expr}'
+	if len(args := tokenize(arg)) < 2:
+		pcontext.setError(PError.invalid, f'Wrong number of arguments for operation: Must be >= 2')
+		return None
 	
-	if (t := expr.partition('+')) and t[1]:
-		return _calcExpression(pcontext, t[0]) + _calcExpression(pcontext, t[2])
-	if (t := expr.partition('-')) and t[1]:
-		return _calcExpression(pcontext, t[0]) - _calcExpression(pcontext, t[2])
-	if (t := expr.partition('*')) and t[1]:
-		return _calcExpression(pcontext, t[0]) * _calcExpression(pcontext, t[2])
-	if (t := expr.partition('/')) and t[1]:
-		return _calcExpression(pcontext, t[0]) / _calcExpression(pcontext, t[2])
-	if (t := expr.partition('%')) and t[1]:
-		return _calcExpression(pcontext, t[0]) % _calcExpression(pcontext, t[2])
-	if (t := expr.partition('^')) and t[1]:
-		return _calcExpression(pcontext, t[0]) ** _calcExpression(pcontext, t[2])
-	return float(expr)
+	# Convert strings to numbers
+	nums:list[Decimal] = []
+	try:
+		for each in args:
+			nums.append(Decimal(each))
+	except InvalidOperation as e:
+		pcontext.setError(PError.invalid, f'Not a number: {each}')
+		return None
+
+	# Do the calculation
+	while len(nums) > 1:
+		l = nums.pop(0)
+		r = nums.pop(0)
+		nums.insert(0, op(l, r)) # calculate and insert the result to the beginning of the list
+
+	return str(nums[0])	# final result is the only element in the list.
 
 
 def _executeProcedure(pcontext:PContext, cmd:str, arg:str) -> PContext:
-	"""	Execute a PROCEDURE in its own scope. Variables are still global. If the
-		procedure returns a result then it is available in the PContext's
-		`result` attribute.
+	"""	Execute a PROCEDURE in its own scope. 
+	
+		Variables are still global. If the procedure returns a result then it is
+		available in the PContext's	*result* attribute.
 
 		Args:
 			pcontext: Current PContext for the script.

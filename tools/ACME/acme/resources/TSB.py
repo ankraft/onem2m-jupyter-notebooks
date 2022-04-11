@@ -16,12 +16,7 @@ from ..services import CSE as CSE
 from ..services.Logging import Logging as L
 
 
-# DISCUSS child of CB, CSR, AE
-# DISCUSS announcedResource?
-
-# DISCUSS Only one TSB with loss_of_sync, but only one is relevant. Only one is allowed? Check in update/create
-
-# TODO docs for configuration
+# DISCUSS Only one TSB with loss_of_sync, but only one is relevant for a requester. Only one is allowed? Check in update/create
 
 
 class TSB(AnnounceableResource):
@@ -63,8 +58,9 @@ class TSB(AnnounceableResource):
 
 
 
-# timeSyncBeaconAnnc is missing from TS-0001 Table 9.6.1.1-1: Resource Types
-# DISCUSS beaconRequester prerequisites are not specifically mentioned in CREATE and UPDATE procedure. -> good would be that if not present then the CSE provides a value. Add to TS-0004 procedures
+
+# DISCUSS beaconRequester prerequisites are not specifically mentioned in CREATE and UPDATE procedure. ->
+#  good would be that if not present then the CSE provides a value. Add to TS-0004 procedures
 
 
 # TODO Implement Annc
@@ -81,14 +77,25 @@ class TSB(AnnounceableResource):
 
 # TODO activate: add to interval updater
 # TODO update:
+# TODO deactivate
 
 	def activate(self, parentResource:Resource, originator:str) -> Result:
 		if not (res := super().activate(parentResource, originator)).status:
 			return res
-		
-		# TODO CSE.time.add
-		
-		return Result(status = True)
+		return CSE.time.addTimeSyncBeacon(self)
+	
+
+	def update(self, dct: JSON = None, originator: str = None) -> Result:
+		originalBcnc = self.bcnc
+		if not (res := super().update(dct, originator)).status:
+			return res
+		return CSE.time.updateTimeSyncBeacon(self, originalBcnc)
+	
+
+	def deactivate(self, originator: str) -> None:
+		super().deactivate(originator)
+		CSE.time.removeTimeSyncBeacon(self)
+
 
 
 	def validate(self, originator:str = None, create:bool = False, dct:JSON = None, parentResource:Resource = None) -> Result:
@@ -99,12 +106,12 @@ class TSB(AnnounceableResource):
 		# Check length of beaconNotificationURI
 		if len(self.bcnu) == 0:
 			L.logWarn(dbg := f'beaconNotificationURI attribute shall shall contain at least one URI')
-			return Result(status = False, rsc = RC.badRequest, dbg = dbg)
+			return Result.errorResult(dbg = dbg)
 
 		# Check beaconInterval
 		if self.hasAttribute('bcni') and self.bcnc != BeaconCriteria.PERIODIC:
 			L.logWarn(dbg := f'beaconInterval attribute shall only be present when beaconCriteria is PERIODIC')
-			return Result(status = False, rsc = RC.badRequest, dbg = dbg)
+			return Result.errorResult(dbg = dbg)
 		if self.bcnc == BeaconCriteria.PERIODIC and not self.hasAttribute('bcni'):
 			self.setAttribute('bcni', Configuration.get('cse.tsb.bcni'))
 		if self.hasAttribute('bcni'):
@@ -113,7 +120,7 @@ class TSB(AnnounceableResource):
 		# Check beaconThreshold
 		if self.hasAttribute('bcnt') and self.bcnc != BeaconCriteria.LOSS_OF_SYNCHRONIZATION:
 			L.logWarn(dbg := f'beaconThreshold attribute shall only be present when beaconCriteria is LOSS_OF_SYNCHRONIZATION')
-			return Result(status = False, rsc = RC.badRequest, dbg = dbg)
+			return Result.errorResult(dbg = dbg)
 		if self.bcnc == BeaconCriteria.LOSS_OF_SYNCHRONIZATION and not self.hasAttribute('bcnt'):
 			self.setAttribute('bcnt', Configuration.get('cse.tsb.bcnt'))
 		if self.hasAttribute('bcnt'):
@@ -123,13 +130,20 @@ class TSB(AnnounceableResource):
 		if self.hasAttribute('bcnr'):
 			if self.bcnc == BeaconCriteria.PERIODIC:
 				L.logWarn(dbg := f'beaconRequester attribute shall only be present when beaconCriteria is LOSS_OF_SYNCHRONIZATION')
-				return Result(status = False, rsc = RC.badRequest, dbg = dbg)
+				return Result.errorResult(dbg = dbg)
 		else:
 			if self.bcnc == BeaconCriteria.LOSS_OF_SYNCHRONIZATION:
 				L.logWarn(dbg := f'beaconRequester attribute shall be present when beaconCriteria is PERIODIC')
-				return Result(status = False, rsc = RC.badRequest, dbg = dbg)
+				return Result.errorResult(dbg = dbg)
 
-		return Result(status = True)
+		return Result.successResult()
 		
 
+	def getInterval(self) -> float:
+		"""	Return the real beacon interval in seconds instead of the ISO period.
+		
+			Returns:
+				Beacon interval as a float representing seconds.
+		"""
+		return self[self._bcni]
 

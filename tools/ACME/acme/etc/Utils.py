@@ -11,7 +11,7 @@
 from __future__ import annotations
 import random, string, sys, re, threading
 import traceback
-from typing import Any, Tuple, cast
+from typing import Any, Callable, Tuple, cast
 
 from .Constants import Constants as C
 from .Types import ResourceTypes as T, ResponseStatusCode
@@ -185,19 +185,6 @@ def isStructured(uri:str) -> bool:
 	return False
 
 
-
-
-	
-
-
-def isAnnouncedResource(resource:Resource) -> bool:
-	"""	Test whether the `resource` is an announced resource. 
-	"""
-	if not resource:
-		return False
-	return resource[resource._isAnnounced]
-
-
 def isValidID(id:str, allowEmpty:bool = False) -> bool:
 	""" Test for a valid ID. 
 
@@ -298,7 +285,7 @@ def riFromStructuredPath(srn: str) -> str:
 			Resource ID
 	"""
 	try:
-		return CSE.storage.structuredPath(srn)[0]['ri']
+		return CSE.storage.structuredIdentifier(srn)[0]['ri']
 	except:
 		return None
 
@@ -314,14 +301,14 @@ def srnFromHybrid(srn:str, id:str) -> Tuple[str, str]:
 	return srn, id
 
 
-def retrieveIDFromPath(id:str, csern:str, csecsi:str) -> Tuple[str, str, str]:
+def retrieveIDFromPath(id:str, csern:str, csecsi:str, SPID:str) -> Tuple[str, str, str, str]:
 	""" Split a full path e.g. from a http request into its component and return a local ri .
 		Also handle retargeting paths.
-		The return tupple is (RI, CSI, SRN).
+		The return tupple is (RI, CSI, SRN, debug message).
 	"""
 
 	if not id:
-		return None, None, None
+		return None, None, None, 'ID must not be empty'
 		
 	csi 		= None
 	spi 		= None
@@ -330,22 +317,23 @@ def retrieveIDFromPath(id:str, csern:str, csecsi:str) -> Tuple[str, str, str]:
 	vrPresent	= None
 
 	# split path
-	ids = id.split('/')
+	idsLen = len(ids := id.split('/'))
 	csecsi = csecsi[1:]	# remove leading / from csi for our comparisons here
 
-	# Test for empty ID
-	if (idsLen := len(ids)) == 0:	# There must be something!
-		return None, None, None
+	# # Test for empty ID
+	# if (idsLen := len(ids)) == 0:	# There must be something!
+	# 	return None, None, None, 'ID must not be empty'
 
-	# Remove the empty elements in the beginnig of the list
+	# Remove the empty elements in the beginnig of the list (they result from a single "/")
 	# and calculate from that the "level", which indicates CSE relative,
 	# SP relative or absolute
+	lvl = 0
 	while not ids[0]:
 		ids.pop(0)
-	lvl = idsLen - len(ids)
-	idsLen -= lvl
+		lvl += 1
+		idsLen -= 1
 	if lvl > 2:						# not more than 2 * / in front
-		return None, None, None
+		return None, None, None, 'Too many "/" level'
 
 	# Remove virtual resource shortname if it is present
 	if T.isVirtualResourceName(ids[-1]):
@@ -366,12 +354,12 @@ def retrieveIDFromPath(id:str, csern:str, csecsi:str) -> Tuple[str, str, str]:
 	elif lvl == 1:								
 		# L.logDebug("SP-Relative")
 		if idsLen < 1:
-			return None, None, None
+			return None, None, None, 'ID too short'
 		csi = ids[0]							# extract the csi
 		if csi != csecsi:						# Not for this CSE? retargeting
 			if vrPresent:						# append last path element again
 				ids.append(vrPresent)
-			return id, csi, srn					# Early return. ri is the (un)structured path
+			return id, csi, srn, None					# Early return. ri is the (un)structured path
 		if idsLen == 1:
 			ri = ids[0]
 		elif idsLen > 1:
@@ -382,19 +370,21 @@ def retrieveIDFromPath(id:str, csern:str, csecsi:str) -> Tuple[str, str, str]:
 			elif idsLen == 2:						# unstructured
 				ri = ids[1]
 			else:
-				return None, None, None
+				return None, None, None, 'Too many "/" level'
 
 	# Absolute (2 first elements are /)
 	elif lvl == 2: 								
 		# L.logDebug("Absolute")
 		if idsLen < 2:
-			return None, None, None
-		spi = ids[0] 							#TODO Check whether it is same SPID, otherwise forward it throw mcc'	see cse.sp configuration
+			return None, None, None, 'ID too short'
+		spi = ids[0]
 		csi = ids[1]
-		if csi != csecsi:
+		if spi != SPID:							# Check for SP-ID
+			return None, None, None, f'SP-ID: {SPID} does not match the request\'s target ID SP-ID: {spi}'
+		if csi != csecsi:						# Check for CSE-ID
 			if vrPresent:						# append virtual last path element again
 				ids.append(vrPresent)
-			return id, csi, srn	# Not for this CSE? retargeting
+			return id, csi, srn, None	# Not for this CSE? retargeting
 		if idsLen == 2:
 			ri = ids[1]
 		elif idsLen > 2:
@@ -405,21 +395,21 @@ def retrieveIDFromPath(id:str, csern:str, csecsi:str) -> Tuple[str, str, str]:
 			elif idsLen == 3:						# unstructured
 				ri = ids[2]
 			else:
-				return None, None, None
+				return None, None, None, 'Too many "/" level'
 
 	# Now either csi, ri or structured srn is set
 	if ri:
 		if vrPresent:
 			ri = f'{ri}/{vrPresent}'
-		return ri, csi, srn
+		return ri, csi, srn, None
 	if srn:
 		if vrPresent:
 			srn = f'{srn}/{vrPresent}'
-		return riFromStructuredPath(srn), csi, srn
+		return riFromStructuredPath(srn), csi, srn, None
 	if csi:
-		return riFromCSI(f'/{csi}'), csi, srn
+		return riFromCSI(f'/{csi}'), csi, srn, None
 	# TODO do something with spi?
-	return None, None, None
+	return None, None, None, 'Unsupported ID'
 
 
 def riFromCSI(csi:str) -> str:
@@ -436,7 +426,13 @@ def riFromCSI(csi:str) -> str:
 
 
 def getIdFromOriginator(originator: str, idOnly: bool = False) -> str:
-	""" Get AE-ID-Stem or CSE-ID from the originator (in case SP-relative or Absolute was used)
+	""" Get AE-ID-Stem or CSE-ID from the originator (in case SP-relative or Absolute was used).
+
+		Args:
+			originator: An originator.
+			idOnly: Indicator that only the CSE-local resource ID is provided.
+		Returns:
+			Resource ID.
 	"""
 	if idOnly:
 		return originator.split("/")[-1] if originator else originator
@@ -446,10 +442,33 @@ def getIdFromOriginator(originator: str, idOnly: bool = False) -> str:
 
 def toSPRelative(originator:str) -> str:
 	"""	Add the CSI to an originator (if not already present).
+
+		Args:
+			An originator.
+		Return:
+			A string in the format */<csi>/<originator*.
 	"""
 	if not isSPRelative(originator):
 		return  f'{CSE.cseCsi}/{originator}'
 	return originator
+
+
+def compareIDs(id1:str, id2:str) -> bool:
+	"""	Compare two resource IDs.
+
+		Both IDs can be either unstructured or structured resource IDs. They match
+		if they point to the same resource.
+
+		Args:
+			id1: First ID for the comparison.
+			id2: Second ID for the comparison
+		Return:
+			True if both IDs point to the same resource, False otherwise.
+	"""
+	ri1 = riFromStructuredPath(id1) if isStructured(id1) else id1
+	ri2 = riFromStructuredPath(id2) if isStructured(id2) else id2
+	return ri1 == ri2
+
 
 
 ##############################################################################
@@ -825,9 +844,19 @@ def hasRegisteredAE(originator:str) -> bool:
 #	Threads
 #
 
+# TODO Doc
 def renameCurrentThread(name:str = None, thread:threading.Thread = None) -> None:
 	thread = threading.current_thread() if not thread else thread
 	thread.name = name if name else str(thread.native_id)
+
+
+# TODO Doc
+def runAsThread(task:Callable, *args:Any, **kwargs:Any) -> None:
+	thread = threading.Thread(target = task, args = args, kwargs = kwargs)
+	thread.setDaemon(True)		# Make the thread a daemon of the main thread
+	thread.start()
+	thread.name = str(thread.native_id)
+
 
 
 ##############################################################################

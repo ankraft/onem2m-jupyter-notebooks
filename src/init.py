@@ -6,7 +6,7 @@
 #
 
 
-import datetime, random, re, sys, time, threading, os
+import datetime, random, re, sys, time, threading, os, shlex
 import http.client
 from enum import IntEnum
 from json import loads, dumps
@@ -160,8 +160,13 @@ def printRequest(url, parameters, content=None):
     """ Print the request. 
     """
     printmd(f'### HTTP Request')
-    printmd(f'**{url}**	')
+
+    printmd('\n#### Target URL\n')
+    printHtml(f'<p>{url}</p')
+
+    printmd('\n#### Headers\n')
     printParameters(parameters)
+
     if content is not None:
         printmd('\n#### Request Content | Body\n')
         (isinstance(content, str)  and printmdCode( annotateShortnames( dumps(loads(content), indent=4))))
@@ -179,6 +184,61 @@ def printResponse(r):
         printJSON(r.text)
 
 
+def printCurl(url, method, parameters, content):
+    printmd('\n#### cURL Request\n')
+    # TODO unique ID for divs to copy
+
+    hs = ' '.join([ f'-H \'{k}:{v}\'' for k,v in parameters.items()])
+    if content:
+        out = f'curl -X {method.__name__.upper()} {hs} -d {shlex.quote(content)} {url}'
+    else:
+        out = f'curl -X {method.__name__.upper()} {hs} {url}'
+
+    printHtml("""
+    <script>
+    function CopyAlert(id) {
+        a = document.getElementById(id+'_1');
+        b = document.getElementById(id+'_2');
+        a.style.display = 'none';
+        b.style.display = 'block';
+        setTimeout(function() {
+            b.style.display = 'none';
+            a.style.display = 'block';
+        }, 1000)
+    }
+    function CopyToClipboard(id) {
+        var r = document.createRange();
+        r.selectNode(document.getElementById(id));
+        window.getSelection().removeAllRanges();
+        window.getSelection().addRange(r);
+        document.execCommand('copy');
+        window.getSelection().removeAllRanges();
+        CopyAlert(id);
+    }
+
+    </script>
+    """)
+    id = str(random.randint(1,sys.maxsize))
+    printHtml(f"""
+    <div style="background-color:#efeff3;">
+        <div id="{id}" style="padding:10px;font-family:monospace;font-size:x-small;">{out}</div>
+        <div style="padding-bottom:10px;text-align:center;font-size:small;height: 30px;">
+            <div id="{id}_1">
+                <button onclick="CopyToClipboard(\'{id}\');return false;" style="border:2px solid #005480;background-color:transparent;border-radius:4px;padding:5px 10px;color:#005480;">
+                    <b>Copy to clipboard</b>
+                </button>
+            </div>
+            <div id="{id}_2" style="display:none;color:#005480;padding:4px;">
+                <b>copied</b>
+            </div>
+        </div>
+    </div>
+    """)
+
+
+
+
+
 def printShortResponse(r):
     """ Print terse response code. 
     """
@@ -190,14 +250,26 @@ def printShortResponse(r):
         printStatusCode(r.status_code, r.reason)
 
 
-def printHtmlError(s):
-    printHtml(
-f"""
-<div class="alert alert-block alert-danger" style="background-color: white; border: 2px solid; padding: 10px; width:80%;">
+def printHtmlError(s, details = None):
+    out = f"""
+<p>
+<div class="alert alert-block alert-danger" style="background-color: transparent; border: 4px solid; padding: 10px; width:calc(100% - 350px);">
     <b><i class="fa fa-exclamation-triangle" aria-hidden="true"></i>&nbsp; Error</b><br>
     {s}
+"""
+    if details:
+        out +=f"""
+<br>
+	<details>
+  		<summary><b>Details</b></summary>
+  		<p>{details}</p>
+	</details>
+"""
+    out += """
 </div>
-""")
+</p>
+"""
+    printHtml(out)
 
 
 def printConnectionError(msg:str):
@@ -206,10 +278,8 @@ f"""
 <b>Cannot access the CSE, or the CSE is not runnning.</b></br>
 Please <a href="start-cse.ipynb" target="_new">start the CSE</a> or check the configuration file <a href="/edit/src/config.py" target=_new>config.py</a>. 
 Did you specify the correct address, credentials, and proxy server?</br>
-Please restart this notebook kernel after you have updated the configuration file.<br>
-<br>
-<b>Error message</b><br>{msg}
-""")
+Please restart this notebook kernel in case you will update the configuration file.<br>
+""", msg);
 
 
 # The following request methods hide a bit of the complexity of constructing the
@@ -325,6 +395,7 @@ def _sendRequest(method, **parameters) -> str:
             __responseStatusCode = int(resp.headers['X-M2M-RSC']) if resp.headers['X-M2M-RSC'] else -1
             if _verbose:
                 printRequest(url, headers, content)
+                printCurl(url, method, headers, content)
                 printResponse(resp)
                 showResourceTree()
                 printmd('---')

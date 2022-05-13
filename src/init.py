@@ -7,6 +7,7 @@
 
 
 import datetime, random, re, sys, time, threading, os, shlex
+import resource
 import http.client
 from enum import IntEnum
 from json import loads, dumps
@@ -90,6 +91,7 @@ __responseStatusCode = 0
 
 __verbose = True
 __withResults = False
+__displayLongNames = True
 
 def printmd(s, c=None, hd=''):
     """ Print and format as Markdown.
@@ -117,11 +119,25 @@ def printmdCode(s):
     IPython.display.display(Markdown(result))
 
 
-def printJSON(j):
+def printJSON(j, req = None):
     """ Format and print JSON.
     """
-    #print(dumps(loads(j), indent=2))
-    printmdCode( annotateShortnames( highlightDebugMessage( dumps(loads(j), indent=4))) )
+    if j:
+        _j = None
+        if isinstance(j, str):
+            _j = loads(j)
+        elif isinstance(j, dict):
+            _j = j
+        if _j is not None:
+            printmdCode( annotateShortnames( highlightDebugMessage( dumps(_j, indent=4)), __displayLongNames ) )
+    if req is not None:
+        printHtml(f'''
+<details>
+    <summary><b>Whole oneM2M request / response with short names</b></summary>
+    
+    <p><pre>{dumps(req, indent=4)}</pre></p>
+</details>
+''')
 
 
 def clearCell():
@@ -130,7 +146,7 @@ def clearCell():
     clear_output(wait=True)
 
 
-excludedHeaders = [ 'Access-Control-Allow-Origin', 'Authorization', 'Connection', 'Content-Length', 'ETag',
+excludedHeaders = [ 'Access-Control-Allow-Origin', 'Authorization', 'Connection', 'Content-Length', 'Date', 'ETag',
                     'request-context', 'Server', 'Strict-Transport-Security', 'Transfer-Encoding'
                   ]
 """ http headers excluded from printing on the notebook. """
@@ -156,7 +172,7 @@ def printStatusCode(statusCode, reason):
     printmd(str(statusCode) + ' (' + reason + ')', 'green' if 200 <= statusCode < 300 else 'red')
 
 
-def printRequest(url, parameters, content=None):
+def printRequest(url, parameters, content=None, req={}):
     """ Print the request. 
     """
     printmd(f'### HTTP Request')
@@ -169,11 +185,13 @@ def printRequest(url, parameters, content=None):
 
     if content is not None:
         printmd('\n#### Request Content | Body\n')
-        (isinstance(content, str)  and printmdCode( annotateShortnames( dumps(loads(content), indent=4))))
-        (isinstance(content, dict) and printmdCode( annotateShortnames( dumps(content, indent=4))))
+    printJSON(content, { 'm2m:rqp' : req } )
+
+        # (isinstance(content, str)  and printmdCode( annotateShortnames( dumps(loads(content), indent=4), __displayLongNames)))
+        # (isinstance(content, dict) and printmdCode( annotateShortnames( dumps(content, indent=4), __displayLongNames)))
 
 
-def printResponse(r):
+def printResponse(r, req):
     """ Tidy-print a response header. 
     """
     printmd('---\n### HTTP Response')
@@ -181,12 +199,11 @@ def printResponse(r):
     printParameters(r.headers)
     if r.text:
         printmd('\n**Response Content | Body**\n')
-        printJSON(r.text)
+    printJSON(r.text, { 'm2m:rsp' : req } )
 
 
 def printCurl(url, method, parameters, content):
     printmd('\n#### cURL Request\n')
-    # TODO unique ID for divs to copy
 
     hs = ' '.join([ f'-H \'{k}:{v}\'' for k,v in parameters.items()])
     if content:
@@ -222,9 +239,9 @@ def printCurl(url, method, parameters, content):
     printHtml(f"""
     <div style="background-color:#efeff3;">
         <div id="{id}" style="padding:10px;font-family:monospace;font-size:x-small;">{out}</div>
-        <div style="padding-bottom:10px;text-align:center;font-size:small;height: 30px;">
+        <div style="padding-bottom:10px;text-align:center;font-size:small;height:40px;">
             <div id="{id}_1">
-                <button onclick="CopyToClipboard(\'{id}\');return false;" style="border:2px solid #005480;background-color:transparent;border-radius:4px;padding:5px 10px;color:#005480;">
+                <button onclick="CopyToClipboard(\'{id}\');return false;" style="border:2px solid #005480;background-color:transparent;border-radius:4px;padding:5px;color:#005480;">
                     <b>Copy to clipboard</b>
                 </button>
             </div>
@@ -234,8 +251,6 @@ def printCurl(url, method, parameters, content):
         </div>
     </div>
     """)
-
-
 
 
 
@@ -260,10 +275,10 @@ def printHtmlError(s, details = None):
     if details:
         out +=f"""
 <br>
-	<details>
-  		<summary><b>Details</b></summary>
-  		<p>{details}</p>
-	</details>
+    <details>
+          <summary><b>Details</b></summary>
+          <p>{details}</p>
+    </details>
 """
     out += """
 </div>
@@ -290,7 +305,7 @@ def showResourceTree(section:bool = True, title:str = 'CSE Resource Tree') -> No
         if section:
             printmd('---')
         printmd(f'### {title}')
-        printmdCode(annotateRT(resp.text))
+        printmdCode(annotateRT(resp.text, __displayLongNames))
 
 
 #############################################################################
@@ -302,67 +317,98 @@ def _sendRequest(method, **parameters) -> str:
     global __response, __responseStatusCode, __verbose
     __response = None
     headers = {}
+    req = {}
+    fc = {} # filter criteria
 
     """ Check and update the given parameters, and send a request with the given method.
     """
 
     # check and extract some parameters. Most parameters need individual handling.
-    if (target := parameters.pop('target', None)) is None:
-        return '<b>target</b> parameter is missing'
+    if (to := parameters.pop('to', None)) is None:
+        return '<b>to</b> parameter is missing'
+    req['to'] = to
 
-    if (content := parameters.pop('content', None)) is None and method in [ requests.post, requests.put ]:
-        return '<b>content</b> parameter is missing'
-    if content is not None: # could be None when method is get() or delete()
-        content = content if isinstance(content, str) else dumps(content)   # Transform content to JSON 
+    if (primitiveContent := parameters.pop('primitiveContent', None)) is None and method in [ requests.post, requests.put ]:
+        return '<b>primitiveContent</b> parameter is missing'
+    if primitiveContent is not None: # could be None when method is get() or delete()
+        primitiveContent = primitiveContent if isinstance(primitiveContent, str) else dumps(primitiveContent)   # Transform content to JSON 
+        primitiveContent = jsonLong2Short(primitiveContent)
 
     if (resourceType := parameters.pop('resourceType', None)) is None and method in [ requests.post ]:
         return '<b>resourceType</b> parameter is missing'
-    if resourceType is not None and not isinstance(resourceType, int):
-        return '<b>resourceType</b> parameter must be an integer number'
+    if resourceType is not None:
+        if not isinstance(resourceType, int):
+            return '<b>resourceType</b> parameter must be an integer number'
+        req['ty'] = resourceType
 
     if (originator := parameters.pop('originator', None)) is None:
         return '<b>originator</b> parameter is missing'
     if not isinstance(originator, str):
         return '<b>originator</b> parameter must be a string'
     headers[_originator] = originator
+    req['fr'] = originator
 
-    if len(ri := parameters.pop('requestIdentifier', f'ri-{random.randint(1,sys.maxsize)}')) == 0:
+    if len(rqi := parameters.pop('requestIdentifier', f'ri-{random.randint(1,sys.maxsize)}')) == 0:
         return '<b>requestIdentifier</b> parameter must not be empty'
-    if not isinstance(ri, str):
+    if not isinstance(rqi, str):
         return '<b>requestIdentifier</b> parameter must be a string'
-    headers[_requestIdentifier] = ri
+    headers[_requestIdentifier] = rqi
+    req['rqi'] = rqi
 
     if len(rvi := parameters.pop('releaseVersionIndicator', '3')) == 0:
         return '<b>releaseVersionIndicator</b> parameter must not be empty'
     if not isinstance(rvi, str):
         return '<b>releaseVersionIndicator</b> parameter must be a string'
     headers[_releaseVersionIndicator] = rvi
+    req['rvi'] = rvi
     
     headers['Content-Type'] = f'application/json{f";ty={resourceType}" if resourceType is not None else ""}'
     headers['Accept'] = 'application/json'  # Always send an 'Accept' header even when not needed
+    if resourceType is not None:
+        req['ty'] = resourceType
 
     args = ''
     if (fu := parameters.pop('filterUsage', None)) is not None:
         if not isinstance(fu, int):
             return '<b>filterUsage</b> parameter must be an integer number'
         args += f'{"&" if len(args)>0 else ""}fu={fu}'
-    if (filters := parameters.pop('filters', None)) is not None:
-        if not isinstance(filters, list):
-            return '<b>filters</b> parameter must be a list of strings'
-        for each in filters:
-            args += f'{"&" if len(args)>0 else ""}{each}'
+        fc['fu'] = fu
+
+    if (filterCriteria := parameters.pop('filterCriteria', None)) is not None:
+        if not isinstance(filterCriteria, dict):
+            return '<b>filterCriteria</b> parameter must be a dictionary'
+        for k, v in filterCriteria.items():
+            _v = ''
+            if isinstance(v, str):
+                _v = v
+            elif isinstance(v, bool):
+                _v = str(v).lower()
+            elif isinstance(v, list):
+                _v = '+'.join(v)
+            else:
+                _v = v
+            _k = long2short(k)
+            args += f'{"&" if len(args)>0 else ""}{_k}={_v}'
+            fc[_k] = v
+
+
     if (rcn := parameters.pop('resultContent', None)) is not None:
         if not isinstance(rcn, int):
             return '<b>resultContent</b> parameter must be an integer number'
         args += f'{"&" if len(args)>0 else ""}rcn={rcn}'
+        fc['rcn'] = rcn
+
     if (lvl := parameters.pop('level', None)) is not None:
         if not isinstance(lvl, int):
             return '<b>level</b> parameter must be an integer number'
         args += f'{"&" if len(args)>0 else ""}lvl={lvl}'
-    if (ty := parameters.pop('childType', None)) is not None:
+        fc['lvl'] = lvl
+
+    if (ty := parameters.pop('type', None)) is not None:
         if not isinstance(ty, int):
             return '<b>childType</b> parameter must be an integer number'
         args += f'{"&" if len(args)>0 else ""}ty={ty}'
+        fc['ty'] = ty
 
     # Check verbosity
     _verbose = __verbose
@@ -380,23 +426,47 @@ def _sendRequest(method, **parameters) -> str:
     #args += '&'.join('{!s}={!r}'.format(key,val) for (key,val) in parameters.items())
     if len(parameters) > 0:
         args += '&' + '&'.join(f'{key}={val}' for (key,val) in parameters.items())
+    if fc:
+        req['fc'] = fc
+    if primitiveContent:
+         req['pc'] = loads(primitiveContent) # Put pc last
+
     
     # Send request 'repeat' times
     for i in range(repeat):
 
         try:
             args = f'?{args}' if len(args) > 0 else ''
-            url = f'{host}{target}{args}'
-            if content is not None:
-                resp = method(url, headers=headers, data=content)
+            url = f'{host}{to}{args}'
+            if primitiveContent is not None:
+                resp = method(url, headers=headers, data=primitiveContent)
             else:
                 resp = method(url, headers=headers)
             __response = resp.json() if len(resp.content) else None
             __responseStatusCode = int(resp.headers['X-M2M-RSC']) if resp.headers['X-M2M-RSC'] else -1
+            __rqi = resp.headers['X-M2M-RI'] if resp.headers['X-M2M-RI'] else None
+            __rvi = resp.headers['X-M2M-RVI'] if resp.headers['X-M2M-RVI'] else None
+            __ot = resp.headers['X-M2M-OT'] if resp.headers['X-M2M-OT'] else None
+            
+            rsp = {}
+            rsp['to'] = originator
+            rsp['fr'] = to
+            rsp['rsc'] = __responseStatusCode
+            if __rvi:
+                rsp['rvi'] = __rvi
+            if __rqi:
+                rsp['rqi'] = __rqi
+            if __ot:
+                rsp['ot'] = __ot
+            if __response:
+                rsp['pc'] = __response
+
+            # TODO TBC
+
             if _verbose:
-                printRequest(url, headers, content)
-                printCurl(url, method, headers, content)
-                printResponse(resp)
+                printRequest(url, headers, primitiveContent, req)
+                printCurl(url, method, headers, primitiveContent)
+                printResponse(resp, rsp)
                 showResourceTree()
                 printmd('---')
             elif silent is None:

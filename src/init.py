@@ -31,15 +31,17 @@ cseBaseName = cseRN
 
 # Resource Type names
 class Type(IntEnum):
-    ACP             =    1
-    AE              =    2
-    Container       =    3
-    ContentInstance =    4
-    Group			=    9
-    MgmtObj         =   13
-    Node            =   14
-    Subscription    =   23
-    FlexContainer   =   28
+    ACP                =    1
+    AE                 =    2
+    Container          =    3
+    ContentInstance    =    4
+    Group              =    9
+    MgmtObj            =   13
+    Node               =   14
+    Subscription       =   23
+    FlexContainer      =   28
+    TimeSeries         =   29
+    TimeSeriesInstance =   30
 
     # ManagementDefinitions
     DeviceInfo 		= 1007

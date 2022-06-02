@@ -1,8 +1,8 @@
 #
-#	init.py
+#   init.py
 #
-#	(c) 2021 by Andreas Kraft
-#	License: BSD 3-Clause License. See the LICENSE file for further details.
+#   (c) 2021 by Andreas Kraft
+#   License: BSD 3-Clause License. See the LICENSE file for further details.
 #
 
 
@@ -15,9 +15,10 @@ import IPython.display
 from IPython.display import HTML, Markdown, clear_output
 import requests
 
-from src.config import *
+from config import *
 from annotations import *
 from simulator import *
+from oauth import *
 
 # Parameter names
 _originator = 'X-M2M-Origin'
@@ -93,7 +94,9 @@ __responseStatusCode = 0
 
 __verbose = True
 __withResults = False
-__displayLongNames = True
+
+# Authentication
+__oauthToken = None
 
 def printmd(s, c=None, hd=''):
     """ Print and format as Markdown.
@@ -131,7 +134,7 @@ def printJSON(j, req = None):
         elif isinstance(j, dict):
             _j = j
         if _j is not None:
-            printmdCode( annotateShortnames( highlightDebugMessage( dumps(_j, indent=4)), __displayLongNames ) )
+            printmdCode( annotateAttributes( highlightDebugMessage( dumps(_j, indent=4)), showLongNames ) )
     if req is not None:
         printHtml(f'''
 <details>
@@ -189,8 +192,8 @@ def printRequest(url, parameters, content=None, req={}):
         printmd('\n#### Request Content | Body\n')
     printJSON(content, { 'm2m:rqp' : req } )
 
-        # (isinstance(content, str)  and printmdCode( annotateShortnames( dumps(loads(content), indent=4), __displayLongNames)))
-        # (isinstance(content, dict) and printmdCode( annotateShortnames( dumps(content, indent=4), __displayLongNames)))
+        # (isinstance(content, str)  and printmdCode( annotateAttributes( dumps(loads(content), indent=4), showLongNames)))
+        # (isinstance(content, dict) and printmdCode( annotateAttributes( dumps(content, indent=4), showLongNames)))
 
 
 def printResponse(r, req):
@@ -240,7 +243,7 @@ def printCurl(url, method, parameters, content):
     id = str(random.randint(1,sys.maxsize))
     printHtml(f"""
     <div style="background-color:#efeff3;">
-        <div id="{id}" style="padding:10px;font-family:monospace;font-size:x-small;">{out}</div>
+        <div id="{id}" style="padding:10px;font-family:monospace;font-size:x-small;word-break:break-all;">{out}</div>
         <div style="padding-bottom:10px;text-align:center;font-size:small;height:40px;">
             <div id="{id}_1">
                 <button onclick="CopyToClipboard(\'{id}\');return false;" style="border:2px solid #005480;background-color:transparent;border-radius:4px;padding:5px;color:#005480;">
@@ -307,7 +310,7 @@ def showResourceTree(section:bool = True, title:str = 'CSE Resource Tree') -> No
         if section:
             printmd('---')
         printmd(f'### {title}')
-        printmdCode(annotateRT(resp.text, __displayLongNames))
+        printmdCode(annotateRT(resp.text, showLongNames))
 
 
 #############################################################################
@@ -316,7 +319,7 @@ def showResourceTree(section:bool = True, title:str = 'CSE Resource Tree') -> No
 #
 
 def _sendRequest(method, **parameters) -> str:
-    global __response, __responseStatusCode, __verbose
+    global __response, __responseStatusCode, __verbose, __oauthToken
     __response = None
     headers = {}
     req = {}
@@ -438,6 +441,14 @@ def _sendRequest(method, **parameters) -> str:
     for i in range(repeat):
 
         try:
+            
+            # Handle authentication for each request
+            if doOAuth:
+                if (token := getOAuthToken(__oauthToken)) is None:
+                    return 'error retrieving oauth token'
+                __oauthToken = token
+                headers['Authorization'] = f'Bearer {__oauthToken.token}'
+            
             args = f'?{args}' if len(args) > 0 else ''
             url = f'{host}{to}{args}'
             if primitiveContent is not None:
@@ -445,10 +456,10 @@ def _sendRequest(method, **parameters) -> str:
             else:
                 resp = method(url, headers=headers)
             __response = resp.json() if len(resp.content) else None
-            __responseStatusCode = int(resp.headers['X-M2M-RSC']) if resp.headers['X-M2M-RSC'] else -1
-            __rqi = resp.headers['X-M2M-RI'] if resp.headers['X-M2M-RI'] else None
-            __rvi = resp.headers['X-M2M-RVI'] if resp.headers['X-M2M-RVI'] else None
-            __ot = resp.headers['X-M2M-OT'] if resp.headers['X-M2M-OT'] else None
+            __responseStatusCode = int(resp.headers['X-M2M-RSC']) if resp.headers.get('X-M2M-RSC') else -1
+            __rqi = resp.headers['X-M2M-RI'] if resp.headers.get('X-M2M-RI') else None
+            __rvi = resp.headers['X-M2M-RVI'] if resp.headers.get('X-M2M-RVI') else None
+            __ot = resp.headers['X-M2M-OT'] if resp.headers.get('X-M2M-OT') else None
             
             rsp = {}
             rsp['to'] = originator
@@ -750,8 +761,12 @@ else:
 
     # if there is an argument then take this, reset the CSE, and run the preparation scipt with this parameter
     if len(sys.argv) == 2:
-        resetCSE()
-        setupInitialResourceStructure(sys.argv[1])
-        showResourceTree(False, 'Initial Resource Tree')
+        if upperTester is None:
+            printmd('**Upper Tester interface is not available.**', c = 'red')
+            printmd('Please don\'t provide an argument for the init script.')
+        else:
+            resetCSE()
+            setupInitialResourceStructure(sys.argv[1])
+            showResourceTree(False, 'Initial Resource Tree')
 
 

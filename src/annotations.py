@@ -237,7 +237,7 @@ def long2short(name):
     return name
 
 
-def annotateShortnames(text, longNames = False):
+def annotateAttributes(text, longNames = False):
     ''' Add hover tooltips for shortnames.
     '''
     for sh, ln in explanations.items():

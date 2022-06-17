@@ -105,7 +105,13 @@ def printmd(s, c=None, hd=''):
         cs = f"{hd}<span style='color:{c}'>{s}</span>"
     else:
         cs = f'{hd}{s}'
+    printHtml("""<div style="float:right;">
+    
+    """)
     IPython.display.display(Markdown(cs))
+    printHtml("""
+    
+    </div>""")
 
 
 def printHtml(s):
@@ -135,12 +141,12 @@ def printJSON(j, req = None):
             _j = j
         if _j is not None:
             printmdCode( annotateAttributes( highlightDebugMessage( dumps(_j, indent=4)), showLongNames ) )
+
     if req is not None:
         printHtml(f'''
 <details>
-    <summary><b>Whole oneM2M request / response with short names</b></summary>
-    
-    <p><pre>{dumps(req, indent=4)}</pre></p>
+    <summary><b>oneM2M {"Request" if findXPath(req, "m2m:rqp") else "Response"}</b></summary>
+    <p><pre>{dumps(req, indent = 4)}</pre></p>
 </details>
 ''')
 
@@ -188,6 +194,8 @@ def printRequest(url, parameters, content=None, req={}):
     printmd('\n#### Headers\n')
     printParameters(parameters)
 
+
+
     if content is not None:
         printmd('\n#### Request Content | Body\n')
     printJSON(content, { 'm2m:rqp' : req } )
@@ -208,8 +216,6 @@ def printResponse(r, req):
 
 
 def printCurl(url, method, parameters, content):
-    printmd('\n#### cURL Request\n')
-
     hs = ' '.join([ f'-H \'{k}:{v}\'' for k,v in parameters.items()])
     if content:
         out = f'curl -X {method.__name__.upper()} {hs} -d {shlex.quote(content)} {url}'
@@ -242,6 +248,7 @@ def printCurl(url, method, parameters, content):
     """)
     id = str(random.randint(1,sys.maxsize))
     printHtml(f"""
+	<details><summary><b>cURL Request</b></summary>
     <div style="background-color:#efeff3;">
         <div id="{id}" style="padding:10px;font-family:monospace;font-size:x-small;word-break:break-all;">{out}</div>
         <div style="padding-bottom:10px;text-align:center;font-size:small;height:40px;">
@@ -255,6 +262,7 @@ def printCurl(url, method, parameters, content):
             </div>
         </div>
     </div>
+	</details>
     """)
 
 
@@ -318,6 +326,13 @@ def showResourceTree(section:bool = True, title:str = 'CSE Resource Tree') -> No
 #   Request Handling
 #
 
+_operationMapping = {
+    requests.post   : 1,	# CREATE
+    requests.get    : 2,	# RETRIEVE
+    requests.put    : 3,	# UPDATE
+    requests.delete : 4,	# DELETE
+}
+
 def _sendRequest(method, **parameters) -> str:
     global __response, __responseStatusCode, __verbose, __oauthToken
     __response = None
@@ -328,10 +343,20 @@ def _sendRequest(method, **parameters) -> str:
     """ Check and update the given parameters, and send a request with the given method.
     """
 
+    # add the operation to the request
+    req['op'] = _operationMapping[method]
+
     # check and extract some parameters. Most parameters need individual handling.
     if (to := parameters.pop('to', None)) is None:
         return '<b>to</b> parameter is missing'
     req['to'] = to
+
+    if (originator := parameters.pop('originator', None)) is None:
+        return '<b>originator</b> parameter is missing'
+    if not isinstance(originator, str):
+        return '<b>originator</b> parameter must be a string'
+    headers[_originator] = originator
+    req['fr'] = originator
 
     if (primitiveContent := parameters.pop('primitiveContent', None)) is None and method in [ requests.post, requests.put ]:
         return '<b>primitiveContent</b> parameter is missing'
@@ -345,13 +370,6 @@ def _sendRequest(method, **parameters) -> str:
         if not isinstance(resourceType, int):
             return '<b>resourceType</b> parameter must be an integer number'
         req['ty'] = resourceType
-
-    if (originator := parameters.pop('originator', None)) is None:
-        return '<b>originator</b> parameter is missing'
-    if not isinstance(originator, str):
-        return '<b>originator</b> parameter must be a string'
-    headers[_originator] = originator
-    req['fr'] = originator
 
     if len(rqi := parameters.pop('requestIdentifier', f'ri-{random.randint(1,sys.maxsize)}')) == 0:
         return '<b>requestIdentifier</b> parameter must not be empty'
@@ -462,13 +480,11 @@ def _sendRequest(method, **parameters) -> str:
             __ot = resp.headers['X-M2M-OT'] if resp.headers.get('X-M2M-OT') else None
             
             rsp = {}
-            rsp['to'] = originator
-            rsp['fr'] = to
             rsp['rsc'] = __responseStatusCode
-            if __rvi:
-                rsp['rvi'] = __rvi
             if __rqi:
                 rsp['rqi'] = __rqi
+            if __rvi:
+                rsp['rvi'] = __rvi
             if __ot:
                 rsp['ot'] = __ot
             if __response:
@@ -560,7 +576,7 @@ def runScript(script:str) -> bool:
 def resetCSE(verbose:bool = False) -> bool:
     """	Send an Upper Tester command to reset the CSE.
     """
-    if not runScript('reset'):
+    if not runScript('Reset'):	# uppercase!
         if verbose:
             printmd('**Error during reset**', c='red')
         return False
@@ -751,7 +767,7 @@ def highlightDebugMessage(text):
 if 'httpProxy' in globals() and httpProxy is not None:
     os.environ['http_proxy'] = httpProxy
 if 'httpsProxy' in globals() and httpsProxy is not None:
-    os.environ['https_proxy'] = httpsProxy 
+    os.environ['https_proxy'] = httpsProxy
 
 # At the end of the init check whether the CSE is up and running
 if (msg := checkCSEConnection(cseRN)):
@@ -769,4 +785,8 @@ else:
             setupInitialResourceStructure(sys.argv[1])
             showResourceTree(False, 'Initial Resource Tree')
 
+
+# Modify the Notebooks general CSS a bit
+# Align tables to the left of the cell
+printHtml('<style>table {align:left;display:block}</style>')
 

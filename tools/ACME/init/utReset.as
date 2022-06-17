@@ -3,9 +3,9 @@
 #
 #	This script initiates a CSE reset
 #
-@name reset
+@name Reset
 @description Reset and restart the CSE
-@usage reset
+@usage Reset
 @uppertester
 @onkey Z
 

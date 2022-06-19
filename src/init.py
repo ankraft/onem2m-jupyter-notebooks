@@ -7,7 +7,6 @@
 
 
 import datetime, random, re, sys, time, threading, os, shlex
-import resource
 import http.client
 from enum import IntEnum
 from json import loads, dumps
@@ -105,6 +104,7 @@ def printmd(s, c=None, hd=''):
         cs = f"{hd}<span style='color:{c}'>{s}</span>"
     else:
         cs = f'{hd}{s}'
+    # The extra blank lines are necessary when HTML + MD mix
     printHtml("""<div style="float:right;">
     
     """)
@@ -118,37 +118,25 @@ def printHtml(s):
     IPython.display.display(HTML(s))
 
 
-def printmdCode(s):
-    lines = s.split('\n')
-    result = ''
-    for l in lines:
-        l = l.rstrip()          # Remove all ws from the end
-        stripped = l.lstrip()   # Return a version where all ws is removed from the beginning
-        li = "<span style='font-family: monospace;'>" +'&nbsp;' * (len(l) - len(stripped)) + stripped + '</span>  \n' 
-        li = li.replace('   ', '&nbsp;&nbsp;&nbsp;') # replace all 3*space in the middle
-        result += li.replace('\x03', '\n')  # Replace possible \x03 marker with newlines, e.g. in annotations
-    IPython.display.display(Markdown(result))
-
-
-def printJSON(j, req = None):
-    """ Format and print JSON.
+def htmlGetJSON(jsn, req = None):
+    """ Format and return JSON formatted as HTML.
     """
-    if j:
+    if jsn:
         _j = None
-        if isinstance(j, str):
-            _j = loads(j)
-        elif isinstance(j, dict):
-            _j = j
+        if isinstance(jsn, str):
+            _j = loads(jsn)
+        elif isinstance(jsn, dict):
+            _j = jsn
         if _j is not None:
-            printmdCode( annotateAttributes( highlightDebugMessage( dumps(_j, indent=4)), showLongNames ) )
+           return f'<pre>{annotateAttributesHtml( highlightDebugMessage( dumps(_j, indent = 4)), showLongNames )}</pre>'
+    return ''
 
-    if req is not None:
-        printHtml(f'''
-<details>
-    <summary><b>oneM2M {"Request" if findXPath(req, "m2m:rqp") else "Response"}</b></summary>
-    <p><pre>{dumps(req, indent = 4)}</pre></p>
-</details>
-''')
+
+def htmlGetRequestResponseJSON(req, isRequest):
+        return f"""<details>
+                    <summary><b>oneM2M {"Request" if isRequest else "Response"}</b></summary>
+                    <p><pre>{dumps({ 'm2m:rqp' : req } if isRequest else { 'm2m:rsp' : req }, indent = 4)}</pre></p>
+                </details>"""
 
 
 def clearCell():
@@ -162,60 +150,97 @@ excludedHeaders = [ 'Access-Control-Allow-Origin', 'Authorization', 'Connection'
                   ]
 """ http headers excluded from printing on the notebook. """
 
-def printParameters(parameters):
-    """ Format the headers as a table.
-    """
 
-    table = '''
-| HTTP Header | oneM2M Parameter | Value |
-|:---|:---|:---|
-'''
+def htmlParametersTable(parameters) -> str:
+    """ Format the headers as a table and return an HTML snippet.
+    """
+    rows = ''
     for h,v in parameters.items():
         if h in excludedHeaders:
             continue
         if h == 'X-M2M-RSC':
-            v = annotateRSC(v)
-        table += f'| {annotateHeaderField(h)} | {toOneM2MParameter(h)} | {v} |\n'
-    printmd(table)
+            v = annotateRSCHtml(v)
+        rows += f"""<tr><td style="text-align:left;">{annotateHeaderFieldHtml(h)}</td>
+                        <td style="text-align:left;">{toOneM2MParameter(h)}</td>
+                        <td style="text-align:left;">{v}</td>
+                    </tr>"""
+
+    return f"""
+<table>
+<thead>
+	<tr><th style="text-align:left;">HTTP Header</th>
+        <th style="text-align:left;">Request Attribute</th>
+        <th style="text-align:left;">Value</th>
+    </tr>
+</thead>
+<tbody>
+    {rows}
+</tbody>
+</table>
+    """
 
 
-def printStatusCode(statusCode, reason):
-    printmd(str(statusCode) + ' (' + reason + ')', 'green' if 200 <= statusCode < 300 else 'red')
+def getStatusCodeHtml(statusCode, reason, extra:str = None):
+    extra = f'<br>{extra}' if extra else ''
+    return f""" <p>
+                    <span style="color:{'green' if 200 <= statusCode < 300 else 'red'};">
+                        {statusCode} ({reason}){extra}
+                    </span>
+                </p>"""
 
 
-def printRequest(url, parameters, content=None, req={}):
+def printRequestResponse(parameters, 
+                         content = None, 
+                         url = None, 
+                         statusCode = None, 
+                         reason = None,  
+                         method = None,
+                         req={}):
     """ Print the request. 
     """
-    printmd(f'### HTTP Request')
 
-    printmd('\n#### Target URL\n')
-    printHtml(f'<p>{url}</p')
-
-    printmd('\n#### Headers\n')
-    printParameters(parameters)
-
-
-
-    if content is not None:
-        printmd('\n#### Request Content | Body\n')
-    printJSON(content, { 'm2m:rqp' : req } )
-
-        # (isinstance(content, str)  and printmdCode( annotateAttributes( dumps(loads(content), indent=4), showLongNames)))
-        # (isinstance(content, dict) and printmdCode( annotateAttributes( dumps(content, indent=4), showLongNames)))
+    headerTitle = 'Request' if statusCode is None else 'Response'
+    headerHtml = f'<h3>HTTP {headerTitle}</h3>' 
+    urlHtml = f"""<h4>Target URL</h4>
+                     <p>{url}</p>
+               """ if url is not None else ''
+    statusCodeHtml = ''
+    if statusCode is not None and reason is not None:   # response
+        statusCodeHtml = getStatusCodeHtml(statusCode, reason, findXPath(loads(content), 'm2m:dbg') if content else None)
 
 
-def printResponse(r, req):
-    """ Tidy-print a response header. 
-    """
-    printmd('---\n### HTTP Response')
-    printStatusCode(r.status_code, r.reason)
-    printParameters(r.headers)
-    if r.text:
-        printmd('\n**Response Content | Body**\n')
-    printJSON(r.text, { 'm2m:rsp' : req } )
+    # HTML for content rendering
+    contentHtml = ''
+    dividerHtml = ''
+    if content:
+        dividerHtml +=  'padding-right:40px;border-right:1px solid grey;'
+        contentHtml += f"""<div style="float:left;padding-left:40px;">
+                                <h4 style="text-align:center;background:#eeeeee;padding:4px 0px 4px 0px;">{headerTitle} Content | Body</h4>
+                                {htmlGetJSON(content)}
+                           </div>
+                        """
+
+    # HTML for Headers and printing the HTML
+    printHtml(f"""{headerHtml}
+                  {urlHtml}
+                  {statusCodeHtml}
+                  <div style="display:flex;">
+                      <div style="float:left;top:0px;bottom:0px;flex-height:100%;{dividerHtml}">
+                          <h4 style="text-align:center;background:#eeeeee;padding:4px 0px 4px 0px;">Headers</h4>
+                          {htmlParametersTable(parameters)}
+                      </div>
+                      {contentHtml}
+                  </div>
+             """)
+
+    if url:
+        printCurlHtml(url, method, parameters, content) # TODO ge chanto html return
+
+    if req:
+        printHtml(htmlGetRequestResponseJSON(req, isRequest = url is not None))
 
 
-def printCurl(url, method, parameters, content):
+def printCurlHtml(url, method, parameters, content):
     hs = ' '.join([ f'-H \'{k}:{v}\'' for k,v in parameters.items()])
     if content:
         out = f'curl -X {method.__name__.upper()} {hs} -d {shlex.quote(content)} {url}'
@@ -266,65 +291,60 @@ def printCurl(url, method, parameters, content):
     """)
 
 
-
 def printShortResponse(r):
     """ Print terse response code. 
     """
     if not 200 <= r.status_code < 300:
-        printStatusCode(r.status_code, r.reason)
-        printJSON(r.text)
+        printHtml(getStatusCodeHtml(r.status_code, r.reason, findXPath(loads(r.text), 'm2m:dbg')))
 
     elif __withResults: # only when results should be printed
-        printStatusCode(r.status_code, r.reason)
+        printHtml(getStatusCodeHtml(r.status_code, r.reason))
 
 
 def printHtmlError(s, details = None):
-    out = f"""
-<p>
-<div class="alert alert-block alert-danger" style="background-color: transparent; border: 4px solid; padding: 10px; width:calc(100% - 350px);">
-    <b><i class="fa fa-exclamation-triangle" aria-hidden="true"></i>&nbsp; Error</b><br>
-    {s}
-"""
-    if details:
-        out +=f"""
-<br>
-    <details>
-          <summary><b>Details</b></summary>
-          <p>{details}</p>
-    </details>
-"""
-    out += """
-</div>
-</p>
-"""
-    printHtml(out)
+    detailsHtml = f"""<br>
+                        <details>
+                            <summary><b>Details</b></summary>
+                            <p>{details}</p>
+                        </details>
+                    """ if details else ''
+    printHtml(f"""<p>
+                    <div class="alert alert-block alert-danger" style="background-color: transparent; border: 4px solid; padding: 10px; width:calc(100% - 350px);">
+                        <b><i class="fa fa-exclamation-triangle" aria-hidden="true"></i>&nbsp; Error</b><br>
+                        {s}
+                        {detailsHtml}
+                    </div>
+                  </p>""")
 
 
 def printConnectionError(msg:str):
-    printHtmlError(
-f"""
+    printHtmlError(f"""
 <b>Cannot access the CSE, or the CSE is not runnning.</b></br>
 Please <a href="start-cse.ipynb" target="_new">start the CSE</a> or check the configuration file <a href="/edit/src/config.py" target=_new>config.py</a>. 
 Did you specify the correct address, credentials, and proxy server?</br>
 Please restart this notebook kernel in case you will update the configuration file.<br>
-""", msg);
+""", msg)
 
 
-# The following request methods hide a bit of the complexity of constructing the
-# requests and make them easier to read.
-
-def showResourceTree(section:bool = True, title:str = 'CSE Resource Tree') -> None:
+def getResourceTreeHtml(section:bool, title:str) -> None:
     if (resp := requests.get(f'{host}/__structure__/text')).status_code == 200:
-        if section:
-            printmd('---')
-        printmd(f'### {title}')
-        printmdCode(annotateRT(resp.text, showLongNames))
+        return f"""{'<hr/>' if section else ''}
+                   <h3>{title}</h3>
+                   <pre>{annotateRTHtml(resp.text, showLongNames)}</pre>'
+                """
+    return ''
+
+
+def printResourceTree(section:bool = True, title:str = 'CSE Resource Tree'):
+    printHtml(getResourceTreeHtml(section, title))
 
 
 #############################################################################
 #
 #   Request Handling
 #
+#   The following request methods hide a bit of the complexity of constructing the
+#   requests and make them easier to read.
 
 _operationMapping = {
     requests.post   : 1,	# CREATE
@@ -337,26 +357,26 @@ def _sendRequest(method, **parameters) -> str:
     global __response, __responseStatusCode, __verbose, __oauthToken
     __response = None
     headers = {}
-    req = {}
+    rqp = {}
     fc = {} # filter criteria
 
     """ Check and update the given parameters, and send a request with the given method.
     """
 
     # add the operation to the request
-    req['op'] = _operationMapping[method]
+    rqp['op'] = _operationMapping[method]
 
     # check and extract some parameters. Most parameters need individual handling.
     if (to := parameters.pop('to', None)) is None:
         return '<b>to</b> parameter is missing'
-    req['to'] = to
+    rqp['to'] = to
 
     if (originator := parameters.pop('originator', None)) is None:
         return '<b>originator</b> parameter is missing'
     if not isinstance(originator, str):
         return '<b>originator</b> parameter must be a string'
     headers[_originator] = originator
-    req['fr'] = originator
+    rqp['fr'] = originator
 
     if (primitiveContent := parameters.pop('primitiveContent', None)) is None and method in [ requests.post, requests.put ]:
         return '<b>primitiveContent</b> parameter is missing'
@@ -369,26 +389,26 @@ def _sendRequest(method, **parameters) -> str:
     if resourceType is not None:
         if not isinstance(resourceType, int):
             return '<b>resourceType</b> parameter must be an integer number'
-        req['ty'] = resourceType
+        rqp['ty'] = resourceType
 
     if len(rqi := parameters.pop('requestIdentifier', f'ri-{random.randint(1,sys.maxsize)}')) == 0:
         return '<b>requestIdentifier</b> parameter must not be empty'
     if not isinstance(rqi, str):
         return '<b>requestIdentifier</b> parameter must be a string'
     headers[_requestIdentifier] = rqi
-    req['rqi'] = rqi
+    rqp['rqi'] = rqi
 
     if len(rvi := parameters.pop('releaseVersionIndicator', '3')) == 0:
         return '<b>releaseVersionIndicator</b> parameter must not be empty'
     if not isinstance(rvi, str):
         return '<b>releaseVersionIndicator</b> parameter must be a string'
     headers[_releaseVersionIndicator] = rvi
-    req['rvi'] = rvi
+    rqp['rvi'] = rvi
     
     headers['Content-Type'] = f'application/json{f";ty={resourceType}" if resourceType is not None else ""}'
     headers['Accept'] = 'application/json'  # Always send an 'Accept' header even when not needed
     if resourceType is not None:
-        req['ty'] = resourceType
+        rqp['ty'] = resourceType
 
     args = ''
     if (fu := parameters.pop('filterUsage', None)) is not None:
@@ -450,9 +470,9 @@ def _sendRequest(method, **parameters) -> str:
     if len(parameters) > 0:
         args += '&' + '&'.join(f'{key}={val}' for (key,val) in parameters.items())
     if fc:
-        req['fc'] = fc
+        rqp['fc'] = fc
     if primitiveContent:
-         req['pc'] = loads(primitiveContent) # Put pc last
+         rqp['pc'] = loads(primitiveContent) # Put pc last
 
     
     # Send request 'repeat' times
@@ -493,17 +513,15 @@ def _sendRequest(method, **parameters) -> str:
             # TODO TBC
 
             if _verbose:
-                printRequest(url, headers, primitiveContent, req)
-                printCurl(url, method, headers, primitiveContent)
-                printResponse(resp, rsp)
-                showResourceTree()
+                printRequestResponse(headers, primitiveContent, url = url, method = method, req = rqp)
+                printRequestResponse(resp.headers, resp.text, statusCode = resp.status_code, reason = resp.reason, req = rsp)
+                printResourceTree()
                 printmd('---')
             elif silent is None:
                 printShortResponse(resp)
 
         except Exception as e:
             printConnectionError(e.msg)
-
 
 
 def CREATE(**kwargs) -> None:
@@ -596,8 +614,6 @@ def setupInitialResourceStructure(kind:str, verbose:bool = False) -> bool:
         printmd('**Resources prepared**', c='green')
     return False
 
-    
-
 
 ##############################################################################
 
@@ -637,18 +653,6 @@ def cleanCSE() -> bool:
     except Exception as e:
         return False
     return True
-
-
-# The following Exception class is used to show a dialog to the user and gracefully stops the execution
-# of the current cell.
-
-# class StopExecution(Exception):
-#     def __init__(self, message):
-#         super().__init__(message, 'Execution Stopped')
-#         printmd('**' + message + '**', 'red')
-
-#     def _render_traceback_(self):# Prevent printing of stacktrace 
-#         pass
 
 
 def nu():
@@ -761,7 +765,13 @@ def highlightDebugMessage(text):
         text = text[:start] + '<span style=\'color:red\'>' + text[start:end] + '</span>' + text[end:]
     return text
 
+##############################################################################
 
+
+
+# Modify the Notebooks general CSS a bit
+# Align tables to the left of the cell
+printHtml('<style>table {align:left;display:block}</style>')
 
 # Apply optional proxy settings
 if 'httpProxy' in globals() and httpProxy is not None:
@@ -783,10 +793,5 @@ else:
         else:
             resetCSE()
             setupInitialResourceStructure(sys.argv[1])
-            showResourceTree(False, 'Initial Resource Tree')
-
-
-# Modify the Notebooks general CSS a bit
-# Align tables to the left of the cell
-printHtml('<style>table {align:left;display:block}</style>')
+            printResourceTree(False, 'Initial Resource Tree')
 

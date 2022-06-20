@@ -128,14 +128,14 @@ def htmlGetJSON(jsn, req = None):
         elif isinstance(jsn, dict):
             _j = jsn
         if _j is not None:
-           return f'<pre>{annotateAttributesHtml( highlightDebugMessage( dumps(_j, indent = 4)), showLongNames )}</pre>'
+           return f'<pre><span style="font-size:90%;display:inline-block;">{annotateAttributesHtml( highlightDebugMessage( dumps(_j, indent = 4)), showLongNames )}</span></pre>'
     return ''
 
 
 def htmlGetRequestResponseJSON(req, isRequest):
         return f"""<details>
                     <summary><b>oneM2M {"Request" if isRequest else "Response"}</b></summary>
-                    <p><pre>{dumps({ 'm2m:rqp' : req } if isRequest else { 'm2m:rsp' : req }, indent = 4)}</pre></p>
+                    <p><pre><span style="font-size:90%;display:inline-block;">{dumps({ 'm2m:rqp' : req } if isRequest else { 'm2m:rsp' : req }, indent = 4)}</span></pre></p>
                 </details>"""
 
 
@@ -160,13 +160,13 @@ def htmlParametersTable(parameters) -> str:
             continue
         if h == 'X-M2M-RSC':
             v = annotateRSCHtml(v)
-        rows += f"""<tr><td style="text-align:left;">{annotateHeaderFieldHtml(h)}</td>
-                        <td style="text-align:left;">{toOneM2MParameter(h)}</td>
-                        <td style="text-align:left;">{v}</td>
+        rows += f"""<tr><td style="text-align:left;white-space:nowrap;">{annotateHeaderFieldHtml(h)}</td>
+                        <td style="text-align:left;white-space:nowrap;">{toOneM2MParameter(h)}</td>
+                        <td style="text-align:left;width:100%;">{v}</td>
                     </tr>"""
 
     return f"""
-<table>
+<table style="width:100%">
 <thead>
 	<tr><th style="text-align:left;">HTTP Header</th>
         <th style="text-align:left;">Request Attribute</th>
@@ -225,7 +225,7 @@ def printRequestResponse(parameters,
                   {urlHtml}
                   {statusCodeHtml}
                   <div style="display:flex;">
-                      <div style="float:left;top:0px;bottom:0px;flex-height:100%;{dividerHtml}">
+                      <div style="float:left;top:0px;bottom:0px;flex-height:100%;width:450px;{dividerHtml}">
                           <h4 style="text-align:center;background:#eeeeee;padding:4px 0px 4px 0px;">Headers</h4>
                           {htmlParametersTable(parameters)}
                       </div>
@@ -330,7 +330,7 @@ def getResourceTreeHtml(section:bool, title:str) -> None:
     if (resp := requests.get(f'{host}/__structure__/text')).status_code == 200:
         return f"""{'<hr/>' if section else ''}
                    <h3>{title}</h3>
-                   <pre>{annotateRTHtml(resp.text, showLongNames)}</pre>'
+                   <pre>{annotateRTHtml(resp.text, showLongNames)}</pre>
                 """
     return ''
 
@@ -608,7 +608,7 @@ def setupInitialResourceStructure(kind:str, verbose:bool = False) -> bool:
     """
     if not runScript(f'notebooksPrepareResources {kind}'):
         if verbose:
-            printmd('**Error during resource preparation**', c='red')
+            printmd('**Error during resource >paration**', c='red')
             return False
     if verbose:
         printmd('**Resources prepared**', c='green')

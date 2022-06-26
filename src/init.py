@@ -168,7 +168,7 @@ def htmlParametersTable(parameters) -> str:
     return f"""
 <table style="width:100%">
 <thead>
-	<tr><th style="text-align:left;">HTTP Header</th>
+    <tr><th style="text-align:left;">HTTP Header</th>
         <th style="text-align:left;">Request Attribute</th>
         <th style="text-align:left;">Value</th>
     </tr>
@@ -201,7 +201,7 @@ def printRequestResponse(parameters,
 
     headerTitle = 'Request' if statusCode is None else 'Response'
     headerHtml = f'<h3>HTTP {headerTitle}</h3>' 
-    urlHtml = f"""<h4>Target URL</h4>
+    urlHtml = f"""<b style="font-size:110%;">Target URL</b>
                      <p>{url}</p>
                """ if url is not None else ''
     statusCodeHtml = ''
@@ -215,23 +215,25 @@ def printRequestResponse(parameters,
     if content:
         dividerHtml +=  'padding-right:40px;border-right:1px solid grey;'
         contentHtml += f"""<div style="float:left;padding-left:40px;">
-                                <h4 style="text-align:center;background:#eeeeee;padding:4px 0px 4px 0px;">{headerTitle} Content | Body</h4>
+                                <div style="font-weight:600;font-size:110%;text-align:center;background:#eeeeee;padding:1px 0px 1px 0px;margin-bottom:10px;">{headerTitle} Content | Body</div>
                                 {htmlGetJSON(content)}
                            </div>
                         """
+                                # <h4 style="font-weight:600;font-size:110%;text-align:center;background:#eeeeee;padding:4px 0px 4px 0px;">{headerTitle} Content | Body</h4>
 
     # HTML for Headers and printing the HTML
     printHtml(f"""{headerHtml}
                   {urlHtml}
                   {statusCodeHtml}
                   <div style="display:flex;">
-                      <div style="float:left;top:0px;bottom:0px;flex-height:100%;width:450px;{dividerHtml}">
-                          <h4 style="text-align:center;background:#eeeeee;padding:4px 0px 4px 0px;">Headers</h4>
+                      <div style="float:left;top:0px;bottom:0px;flex-height:100%; flex-width:100%;width:450px;{dividerHtml}">
+                          <div style="font-weight:600;font-size:110%;text-align:center;background:#eeeeee;padding:1px 0px 1px 0px;">Headers</div>
                           {htmlParametersTable(parameters)}
                       </div>
                       {contentHtml}
                   </div>
              """)
+                        #   <div style="font-weight:600;font-size:110%;text-align:center;background:#eeeeee;padding:4px 0px 4px 0px;">Headers</div>
 
     if url:
         printCurlHtml(url, method, parameters, content) # TODO ge chanto html return
@@ -273,7 +275,7 @@ def printCurlHtml(url, method, parameters, content):
     """)
     id = str(random.randint(1,sys.maxsize))
     printHtml(f"""
-	<details><summary><b>cURL Request</b></summary>
+    <details><summary><b>cURL Request</b></summary>
     <div style="background-color:#efeff3;">
         <div id="{id}" style="padding:10px;font-family:monospace;font-size:x-small;word-break:break-all;">{out}</div>
         <div style="padding-bottom:10px;text-align:center;font-size:small;height:40px;">
@@ -287,7 +289,7 @@ def printCurlHtml(url, method, parameters, content):
             </div>
         </div>
     </div>
-	</details>
+    </details>
     """)
 
 

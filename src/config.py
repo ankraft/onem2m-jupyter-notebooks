@@ -2,14 +2,14 @@
 cseRN                 = 'cse-in'
 host                  = f'http://localhost:8080/'
 defaultOriginator     = 'CAdmin'
-upperTester           = f'{host}/__ut__'		# Or None if not defined
+upperTester           = f'{host}/__ut__'                            # Or None if not defined
 
 # Extra Configurations
-showLongNames         = True
+showLongNames         = True                                        # Use attribute names instead of their short name versions
 
 # Notification Server
 notificationURLBase   = 'http://localhost'                          # The base URL for the Notification Server
-notificationPort      = 9999										# Notification port
+notificationPort      = 9999                                        # Notification port
 notificationURL       = f'{notificationURLBase}:{notificationPort}' # Notification full URL
 
 # Proxy configuration

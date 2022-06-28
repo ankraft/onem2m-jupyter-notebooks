@@ -275,7 +275,7 @@ def printCurlHtml(url, method, parameters, content):
     """)
     id = str(random.randint(1,sys.maxsize))
     printHtml(f"""
-    <details><summary><b>cURL Request</b></summary>
+    <details><summary><b>curl Request</b></summary>
     <div style="background-color:#efeff3;">
         <div id="{id}" style="padding:10px;font-family:monospace;font-size:x-small;word-break:break-all;">{out}</div>
         <div style="padding-bottom:10px;text-align:center;font-size:small;height:40px;">

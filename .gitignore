@@ -5,3 +5,5 @@ __pycache__/
 
 .DS_Store
 
+.VSCodeCounter
+oneM2M_jupyter_notebooks.egg-info

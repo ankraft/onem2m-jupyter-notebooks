@@ -1,5 +1,5 @@
 # oneM2M Jupyter Notebooks
-This repository contains a number of [Jupyter Notebooks](https://jupyter.org) that give a practical introduction to programmatically interacting with a [oneM2M](http://www.onem2m.org) CSE. The notebooks explain how to access a  CSE, add and update resources, and more.
+This repository contains a number of [Jupyter Notebooks][jupyter] that give a practical introduction to programmatically interacting with a [oneM2M][onem2m] CSE. The notebooks explain how to access a CSE, add and update resources, and more.
 
 - [Installation and Configuration](#installation)  
 - [Running](#running)
@@ -7,8 +7,8 @@ This repository contains a number of [Jupyter Notebooks](https://jupyter.org) th
 - [Runing on Binder](#binder)  
 
 
-[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/ankraft/onem2m-jupyter-notebooks/master?urlpath=lab/tree/__START__.ipynb)
-[![Twitter](https://img.shields.io/twitter/url/https/twitter.com/acmeCSE.svg?style=social&label=%40acmeCSE)](https://twitter.com/acmeCSE)
+[![Binder][binderBadge]][nbbinder]
+[![Twitter][twitterBadge]][twitter]
 
 
 ![images/jupyter-lab.jpg](images/jupyter-lab.jpg)
@@ -50,7 +50,7 @@ Please change the configuration in the file [config.py](config.py) according to 
 
 
 ### oneM2M CSE
-The notebooks have been tested with the [ACME oneM2M CSE](https://github.com/ankraft/ACME-oneM2M-CSE). 
+The notebooks have been tested with the [ACME oneM2M CSE][ACME]. 
 
 These notebooks include the CSE runtime in the directory [tools/ACME](tools/ACME). It needs to be started via the separate notebook [start-cse.ipynb](start-cse.ipynb)
 
@@ -118,12 +118,20 @@ What are &lt;FlexContainer> resources and how to use them?
 
 <a name="binder"></a>
 ## Running online with Binder
-The oneM2M notebooks can be run online with [binder](https://mybinder.org):  
-[https://mybinder.org/v2/gh/ankraft/onem2m-jupyter-notebooks/master?urlpath=lab/tree/\_\_START__.ipynb](https://mybinder.org/v2/gh/ankraft/onem2m-jupyter-notebooks/master?urlpath=lab/tree/__START__.ipynb)
-
+The oneM2M Jupyter notebooks can be [run online][nbbinder] with [binder][binder].
 
 
 ## License
 
 These Notebooks are available under the BSD 3-Clause License.
 
+
+[ACME]: https://github.com/ankraft/ACME-oneM2M-CSE
+[jupyter]: https://jupyter.org
+[onem2m]: http://www.onem2m.org
+[twitter]: https://twitter.com/acmeCSE
+[binder]: https://mybinder.org
+[binderBadge]: https://mybinder.org/badge_logo.svg
+[twitterBadge]: https://img.shields.io/twitter/url/https/twitter.com/acmeCSE.svg?style=social&label=%40acmeCSE
+
+[nbbinder]: https://mybinder.org/v2/gh/ankraft/onem2m-jupyter-notebooks/master?urlpath=lab/tree/__START__.ipynb

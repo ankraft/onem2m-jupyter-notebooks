@@ -3,13 +3,15 @@ hide footbox
 !theme plain
 skinparam backgroundcolor transparent
 
+box Application #f8f8f8
 participant "Notebook\nAE" as AE 
-participant "CSE" as CSE 
 participant "Notification\nServer" as NS
+end box
+participant "CSE" as CSE 
 
 AE -> CSE: CREATE <contentInstance>\ncse-in/Notebook-AE_2/Container
 AE <- CSE: Response
-CSE -> NS: CREATE <notification>\nnormal notification
+CSE -> NS: NOTIFY <notification>
 CSE <- NS: Response
 
 @enduml

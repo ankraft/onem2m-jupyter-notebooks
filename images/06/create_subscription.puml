@@ -3,12 +3,14 @@ hide footbox
 !theme plain
 skinparam backgroundcolor transparent
 
+box Application #f8f8f8
 participant "Notebook\nAE" as AE 
-participant "CSE" as CSE 
 participant "Notification\nServer" as NS
+end box
+participant "CSE" as CSE 
 
 AE -> CSE: CREATE <subscription>\ncse-in/Notebook-AE_2/Container
-CSE -> NS: CREATE <notification>\nverification notification
+CSE -> NS: NOTIFY <notification>\nverification notification
 CSE <- NS: Response
 AE <- CSE: Response
 

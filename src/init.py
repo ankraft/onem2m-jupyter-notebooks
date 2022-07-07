@@ -276,7 +276,7 @@ def printCurlHtml(url, method, parameters, content):
     id = str(random.randint(1,sys.maxsize))
     printHtml(f"""
     <details><summary><b>curl Request</b></summary>
-    <div style="background-color:#efeff3;">
+    <div style="background-color:#eeeeee;">
         <div id="{id}" style="padding:10px;font-family:monospace;font-size:x-small;word-break:break-all;">{out}</div>
         <div style="padding-bottom:10px;text-align:center;font-size:small;height:40px;">
             <div id="{id}_1">
@@ -330,14 +330,20 @@ Please restart this notebook kernel in case you will update the configuration fi
 
 def getResourceTreeHtml(section:bool, title:str) -> None:
     if (resp := requests.get(f'{host}/__structure__/text')).status_code == 200:
-        return f"""{'<hr/>' if section else ''}
-                   <h3>{title}</h3>
-                   <pre>{annotateRTHtml(resp.text, showLongNames)}</pre>
-                """
+
+        return f"""<div style="background-color:transparent;border:2px #444 solid;padding:10px;width:calc(100% - 100px);margin-top:20px;border-radius:10px;">
+                    <div style="color:#444;"><b><i class="fa fa-database" aria-hidden="true"></i>&nbsp; {title}</b></div>
+                       <pre style="padding: 10px;">{annotateRTHtml(resp.text, showLongNames)}</pre>
+                </div>"""
+
+        # return f"""{'<hr/>' if section else ''}
+        #            <h3>{title}</h3>
+        #            <pre style="background-color:#eeeeee;padding: 10px;width: calc(100% - 350px);border-radius:10px;">{annotateRTHtml(resp.text, showLongNames)}</pre>
+        #         """
     return ''
 
 
-def printResourceTree(section:bool = True, title:str = 'CSE Resource Tree'):
+def printResourceTree(section:bool = False, title:str = 'CSE Resource Tree'):
     printHtml(getResourceTreeHtml(section, title))
 
 

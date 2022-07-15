@@ -4,7 +4,7 @@ This repository contains a number of [Jupyter Notebooks][jupyter] that give a pr
 - [Installation and Configuration](#installation)  
 - [Running](#running)
 - [Using the Notebooks](#using)  
-- [Runing on Binder](#binder)  
+- [Running on Binder](#binder)  
 
 
 [![Binder][binderBadge]][nbbinder]

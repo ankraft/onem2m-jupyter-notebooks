@@ -92,7 +92,8 @@ def startup(args:argparse.Namespace, **kwargs: Dict[str, Any]) -> bool:
 	global cseOriginator
 	global isHeadless, cseStatus
 
-	os.environ["FLASK_ENV"] = "development"		# get rid if the warning message from flask. 
+	os.environ["FLASK_DEBUG"] = "True"		# get rid if the warning message from flask. 
+	#os.environ["FLASK_ENV"] = "development"		# get rid if the warning message from flask. 
 												# Hopefully it is clear at this point that this is not a production CSE
 
 	# Set status

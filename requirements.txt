@@ -212,6 +212,8 @@ pickleshare==0.7.5
     # via ipython
 pkgutil-resolve-name==1.3.10
     # via jsonschema
+plotext==5.0.2
+    # via oneM2M-jupyter-notebooks (setup.py)
 prometheus-client==0.14.1
     # via
     #   jupyter-server

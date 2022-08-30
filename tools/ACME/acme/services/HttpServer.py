@@ -323,7 +323,8 @@ class HttpServer(object):
 		Utils.renameCurrentThread()
 		L.isDebug and L.logDebug(f'==> Upper Tester Request:') 
 		L.isDebug and L.logDebug(f'Headers: \n{str(request.headers).rstrip()}')
-		L.isDebug and L.logDebug(f'Body: \n{request.json}')
+		if request.data:
+			L.isDebug and L.logDebug(f'Body: \n{request.json}')
 
 		# Handle special commands
 		if (cmd := request.headers.get('X-M2M-UTCMD')) is not None:
@@ -364,6 +365,7 @@ class HttpServer(object):
 						data:Any = None, 
 						parameters:Parameters = None, 
 						ct:CST = None, 
+						rvi:str = None,
 						raw:bool = False) -> Result:	 # type: ignore[type-arg]
 		"""	Send an http request.
 		
@@ -390,13 +392,13 @@ class HttpServer(object):
 			# Not raw means we need to construct everything from the request
 			hds[C.hfOrigin] = originator
 			hds[C.hfRI] 	= Utils.uniqueRI()
-			hds[C.hfRVI]	= CSE.releaseVersion			# TODO this actually depends in the originator
+			hds[C.hfRVI]	= rvi if rvi is not None else CSE.releaseVersion
 			hds[C.hfOT]		= DateUtils.getResourceDate()
 
 			# Add additional headers
 			if parameters:
-				if C.hfcEC in parameters:				# Event Category
-					hds[C.hfEC] = parameters[C.hfcEC]
+				if 'ec' in parameters:				# Event Category
+					hds[C.hfEC] = parameters['ec']
 			
 		else:	
 			# raw	-> "data" contains a whole requests
@@ -641,7 +643,12 @@ class HttpServer(object):
 				ct = p[0] 					# only the content-type without the resource type
 				t  = p[2].partition('=')[2]
 				if len(t) > 0:
-					req['ty'] = t			# Here we found the type for CREATE requests
+					try:
+						req['ty'] = int(t)			# Here we found the type for CREATE requests
+					except:
+						L.isWarn and L.logWarn(dbg := f'resource type must be an integer: {t}')
+						return Result.errorResult(rsc = RC.badRequest, request = cseRequest, dbg = dbg)
+
 		cseRequest.headers.contentType = ct
 
 		# parse accept header

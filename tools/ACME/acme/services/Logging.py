@@ -104,6 +104,7 @@ class Logging:
 	_logWorker:BackgroundWorker		= None
 
 	terminalStyle:Style				= Style(color = terminalColorDark)
+	terminalStyleRGBTupple			= (0,0,0)
 	terminalStyleError:Style		= Style(color = terminalColorErrorDark)
 	tableRowStyle:Style				= Style(bgcolor = tableRowColorDark)
 
@@ -174,7 +175,7 @@ class Logging:
 		Logging.terminalStyle 		= Style(color = terminalColorDark if theme == 'dark' else terminalColorLight)
 		Logging.tableRowStyle		= Style(bgcolor = tableRowColorDark if theme == 'dark' else tableRowColorLight)
 		Logging.terminalStyleError	= Style(color = terminalColorErrorDark if theme == 'dark' else terminalColorErrorLight)
-
+		Logging.terminalStyleRGBTupple = ( Logging.terminalStyle.color.triplet.red, Logging.terminalStyle.color.triplet.green, Logging.terminalStyle.color.triplet.blue )
 
 	@staticmethod
 	def configUpdate(key:str = None, value:Any = None) -> None:
@@ -263,14 +264,15 @@ class Logging:
 
 
 	@staticmethod
-	def logDebug(msg:Any, stackOffset:int = 0) -> None:
+	def logDebug(msg:Any, stackOffset:int = 0) -> str:
 		"""Print a log message with level DEBUG. 
 		"""
 		Logging._log(logging.DEBUG, msg, stackOffset = stackOffset)
+		return msg
 
 
 	@staticmethod
-	def logErr(msg:Any, showStackTrace:bool = True, exc:Exception = None, stackOffset:int = 0) -> None:
+	def logErr(msg:Any, showStackTrace:bool = True, exc:Exception = None, stackOffset:int = 0) -> str:
 		"""	Print a log message with level ERROR. 
 			`showStackTrace` indicates whether a stacktrace shall be logged together with the error
 			as well.
@@ -286,6 +288,7 @@ class Logging:
 			Logging._log(logging.ERROR, f'{msg}\n\n{strace}', stackOffset = stackOffset)
 		else:
 			Logging._log(logging.ERROR, msg, stackOffset = stackOffset)
+		return msg
 
 
 	@staticmethod

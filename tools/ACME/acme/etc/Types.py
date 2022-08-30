@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 from dataclasses import dataclass, field, astuple
+import enum
 from typing import Tuple, cast, Dict, Any, List, Union
 from enum import IntEnum,  auto
 from http import HTTPStatus
@@ -89,8 +90,10 @@ class ResourceTypes(ACMEIntEnum):
 	UNKNOWN			= -1
 	ALL 			= -2	# used to indicate that something applies to all resources
 	REQRESP			= -3
+	COMPLEX			= -4
 
 	# Resource Types
+	# NOTE Always apply changes also to the m2m:resourceTypes in attributePolicies.ap etc
 
 	MIXED			=  0
 	ACP 			=  1
@@ -113,6 +116,7 @@ class ResourceTypes(ACMEIntEnum):
 	ACTR			= 63
 
 
+
 	# Virtual resources (some are proprietary resource types)
 
 	CNT_OL			=  20001	# actually a memberType
@@ -126,6 +130,8 @@ class ResourceTypes(ACMEIntEnum):
 	TS_LA			=  -20008
 
 	# <mgmtObj> Specializations
+	# NOTE Always apply changes also to the m2m:mgmtDefinition in attributePolicies.ap etc
+	# TODO refactor this into a separate type
 
 	FWR				= 1001
 	SWR				= 1002
@@ -192,7 +198,6 @@ class ResourceTypes(ACMEIntEnum):
 		return ResourceTypes.UNKNOWN
 
 
-
 	def isAnnounced(self) -> bool:
 		"""	Test whether this type is an announced resource type.
 		
@@ -211,26 +216,12 @@ class ResourceTypes(ACMEIntEnum):
 		return self.value in ResourceTypes._virtualResourcesSet		#  type: ignore
 
 
-
-	# def __str__(self) -> str:
-	# 	return str(self.value)
-	
-	# def __repr__(self) -> str:
-	# 	return self.__str__()
-
 	@classmethod
 	def fromTPE(cls, tpe:str) -> ResourceTypes:
 		try:
 			return next(key for key, value in ResourceTypes._names.items() if value == tpe)	# type: ignore
 		except StopIteration:
 			return None
-
-
-	@classmethod
-	def announcedMgd(cls, mgd:int) -> ResourceTypes:
-		if mgd in ResourceTypes._announcedMappingsMGD:				#  type: ignore
-			return ResourceTypes._announcedMappingsMGD[mgd] 		#  type: ignore
-		return ResourceTypes.UNKNOWN
 
 
 	@classmethod
@@ -289,10 +280,8 @@ ResourceTypes._announcedMappings = {								#  type: ignore
 	ResourceTypes.TSI 		: ResourceTypes.TSIAnnc,
 	ResourceTypes.TSB 		: ResourceTypes.TSBAnnc,
 	ResourceTypes.ACTR 		: ResourceTypes.ACTRAnnc,
-}
 
-
-ResourceTypes._announcedMappingsMGD = {								#  type: ignore
+	# ManagementObjs
 	ResourceTypes.FWR		: ResourceTypes.FWRAnnc,
 	ResourceTypes.SWR		: ResourceTypes.SWRAnnc,
 	ResourceTypes.MEM		: ResourceTypes.MEMAnnc,
@@ -467,6 +456,9 @@ class BasicType(ACMEIntEnum):
 	void 			= auto()
 	duration 		= auto()
 	any				= auto()
+	complex 		= auto()
+	enum	 		= auto()
+	adict			= auto()	# anoymous dict structure
 	time			= timestamp	# alias type for time
 	date			= timestamp	# alias type for date
 
@@ -553,11 +545,13 @@ class ResponseStatusCode(ACMEIntEnum):
 	groupMemberTypeInconsistent					= 4110
 	originatorHasAlreadyRegistered				= 4117
 	appRuleValidationFailed						= 4126
+	operationDeniedByRemoteEntity				= 4127
 	internalServerError							= 5000
 	notImplemented								= 5001
 	targetNotReachable 							= 5103
 	receiverHasNoPrivileges						= 5105
 	alreadyExists								= 5106
+	remoteEntityNotReachable					= 5107
 	targetNotSubscribable						= 5203
 	subscriptionVerificationInitiationFailed	= 5204
 	subscriptionHostHasNoPrivilege				= 5205
@@ -595,7 +589,6 @@ ResponseStatusCode._httpStatusCodes = {																		# type: ignore
 		ResponseStatusCode.groupMemberTypeInconsistent				: HTTPStatus.BAD_REQUEST,				# GROUP MEMBER TYPE INCONSISTENT
 		ResponseStatusCode.originatorHasNoPrivilege					: HTTPStatus.FORBIDDEN,					# ORIGINATOR HAS NO PRIVILEGE
 		ResponseStatusCode.invalidChildResourceType					: HTTPStatus.FORBIDDEN,					# INVALID CHILD RESOURCE TYPE
-		ResponseStatusCode.targetNotReachable						: HTTPStatus.FORBIDDEN,					# TARGET NOT REACHABLE
 		ResponseStatusCode.alreadyExists							: HTTPStatus.FORBIDDEN,					# ALREAD EXISTS
 		ResponseStatusCode.targetNotSubscribable					: HTTPStatus.FORBIDDEN,					# TARGET NOT SUBSCRIBABLE
 		ResponseStatusCode.receiverHasNoPrivileges					: HTTPStatus.FORBIDDEN,					# RECEIVER HAS NO PRIVILEGE
@@ -604,8 +597,11 @@ ResponseStatusCode._httpStatusCodes = {																		# type: ignore
 		ResponseStatusCode.subscriptionHostHasNoPrivilege			: HTTPStatus.FORBIDDEN,					# SUBSCRIPTION HOST HAS NO PRIVILEGE
 		ResponseStatusCode.originatorHasAlreadyRegistered			: HTTPStatus.FORBIDDEN,					# ORIGINATOR HAS ALREADY REGISTERED
 		ResponseStatusCode.appRuleValidationFailed					: HTTPStatus.FORBIDDEN,					# APP RULE VALIDATION FAILED
+		ResponseStatusCode.operationDeniedByRemoteEntity			: HTTPStatus.FORBIDDEN,					# OPERATION_DENIED_BY_REMOTE_ENTITY
 		ResponseStatusCode.requestTimeout							: HTTPStatus.FORBIDDEN,					# REQUEST TIMEOUT
 		ResponseStatusCode.notFound									: HTTPStatus.NOT_FOUND,					# NOT FOUND
+		ResponseStatusCode.targetNotReachable						: HTTPStatus.NOT_FOUND,					# TARGET NOT REACHABLE
+		ResponseStatusCode.remoteEntityNotReachable					: HTTPStatus.NOT_FOUND,					# REMOTE_ENTITY_NOT_REACHABLE
 		ResponseStatusCode.operationNotAllowed						: HTTPStatus.METHOD_NOT_ALLOWED,		# OPERATION NOT ALLOWED
 		ResponseStatusCode.notAcceptable 							: HTTPStatus.NOT_ACCEPTABLE,			# NOT ACCEPTABLE
 		ResponseStatusCode.conflict									: HTTPStatus.CONFLICT,					# CONFLICT
@@ -675,6 +671,7 @@ class FilterUsage(ACMEIntEnum):
 	discoveryCriteria		= 1
 	conditionalRetrieval	= 2 # default
 	ipeOnDemandDiscovery	= 3
+	discoveryBasedOperation	= 4
 
 
 class DesiredIdentifierResultType(ACMEIntEnum):
@@ -810,6 +807,18 @@ class RequestStatus(ACMEIntEnum):
 
 ##############################################################################
 #
+#	Event Category 
+#
+
+class EventCategory(ACMEIntEnum):
+	"""	Event Categories """
+	Immediate			= 2
+	BestEffort			= 3
+	Latest				= 4
+
+
+##############################################################################
+#
 #	Content Serializations
 #
 
@@ -930,9 +939,10 @@ class NotificationEventType(ACMEIntEnum):
 	resourceDelete						=  2	# B
 	createDirectChild					=  3 # C
 	deleteDirectChild					=  4 # D	
-	retrieveCNTNoChild					=  5	# E # TODO not supported yet
+	retrieveCNTNoChild					=  5 # E # TODO not supported yet
 	triggerReceivedForAE				=  6 # F # TODO not supported yet
-	blockingUpdate 						=  7 # G # TODO not supported yet
+	blockingUpdate 						=  7 # G
+	# TODO spec and implementation for blockingUpdateDirectChild			=  ???
 	reportOnGeneratedMissingDataPoints	=  8 # H
 	blockingRetrieve					=  9 # I # EXPERIMENTAL
 	blockingRetrieveDirectChild			= 10 # J # EXPERIMENTAL
@@ -985,9 +995,8 @@ class LastTSInstance:
 	"""	Data class for a single TS's latest and next expected TSI/dgt, and other information """
 
 	# runtime attributes
-	dgt:float							= 0.0
+	dgt:list[float]						= field(default_factory = lambda: [0])
 	expectedDgt:float				 	= 0.0
-	arrivedAt:float						= 0.0
 	missingDataDetectionTime:float		= 0.0
 
 	# <TS> attributes
@@ -996,17 +1005,48 @@ class LastTSInstance:
 	peid:float							= 0.0
 
 	# Subscriptions
-	missingData:dict[str, MissingData]	= field(default_factory=dict)
+	missingData:dict[str, MissingData]	= field(default_factory = dict)
 
 	# Internal
 	actor:BackgroundWorker				= None	#type:ignore[name-defined] # actor for this TS 
 	running:bool 						= False # for late activation of this 
 
-	def prepareNextRun(self) -> None:
-		"""	Set the next expectedDgt and missingDataDetectionTime.
+
+	def prepareNextDgt(self) -> None:
+		"""	Set the next expectedDgt.
 		"""
 		self.expectedDgt += self.pei
-		self.missingDataDetectionTime += self.pei
+	
+
+	def prepareNextRun(self) -> None:
+		"""	Set the next missingDataDetectionTime.
+		"""
+		self.missingDataDetectionTime += self.pei # mdt?
+	
+
+	def addDgt(self, dgt:float) -> None:
+		# TODO really support list. currently only one dgt is put, but 
+		# always overrides the old one. 
+		# Also change declaration of dgt above
+		if len(self.dgt) == 0:
+			self.dgt.append(dgt)
+		else:
+			self.dgt[0] = dgt
+	
+
+	def nextDgt(self) -> float:
+		if len(self.dgt) == 0:
+			return None
+		return self.dgt.pop(0)
+	
+
+	def hasDgt(self) -> bool:
+		return len(self.dgt) > 0
+	
+
+	def clearDgt(self) -> None:
+		self.dgt.clear()
+		
 
 
 ##############################################################################
@@ -1039,13 +1079,13 @@ class BeaconCriteria(ACMEIntEnum):
 
 @dataclass
 class Result:
-	resource:Resource			= None		# type: ignore # Actually this is a Resource type, but have a circular import problem.
-	data:Any|List[Any]|JSON		= None 		# Anything, or list of anything, or a JSON dictionary	
-	rsc:ResponseStatusCode		= ResponseStatusCode.UNKNOWN	#	The resultStatusCode of a Result
-	dbg:str 					= None
-	request:CSERequest			= None  	# may contain the processed incoming request object
-	embeddedRequest:CSERequest 	= None		# May contain a request as a response, e.g. when polling
-	status:bool 				= None
+	resource:Resource				= None		# type: ignore # Actually this is a Resource type, but have a circular import problem.
+	data:Any|List[Any]|Tuple|JSON	= None 		# Anything, or list of anything, or a JSON dictionary	
+	rsc:ResponseStatusCode			= ResponseStatusCode.UNKNOWN	#	The resultStatusCode of a Result
+	dbg:str 						= None
+	request:CSERequest				= None  	# may contain the processed incoming request object
+	embeddedRequest:CSERequest 		= None		# May contain a request as a response, e.g. when polling
+	status:bool 					= None
 
 
 	def errorResultCopy(self) -> Result:
@@ -1223,6 +1263,12 @@ class AttributePolicy:
 	namespace:str				= None	# namespace
 	tpe:str   					= None	# namespace:type name
 	rtypes:List[ResourceTypes]	= None	# Optional list of multiple resourceTypes
+	ctype:str					= None	# Definition for a complex type attribute
+	typeName:str				= None	# The type as written in the definition
+	fname:str					= None 	# Name of the definition file
+	ltype:BasicType				= None	# sub-type of a list
+	lTypeName:str				= None	# sub-type of a list as writen in the definition
+	evalues:list[Any]			= None 	# List of enum values
 
 	# TODO support annnouncedSyncType
 
@@ -1242,6 +1288,8 @@ class AttributePolicy:
 
 """	Represent a dictionary of attribute policies used in validation. """
 AttributePolicyDict = Dict[str, AttributePolicy]
+ResourceAttributePolicyDict = Dict[Tuple[Union[ResourceTypes, str], str], AttributePolicy]
+
 FlexContainerAttributes = Dict[str, Dict[str, AttributePolicy]]
 FlexContainerSpecializations = Dict[str, str]
 

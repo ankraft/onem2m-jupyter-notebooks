@@ -11,13 +11,13 @@ from __future__ import annotations
 from typing import List, cast
 import datetime, json, os, sys, webbrowser
 from enum import IntEnum, auto
-from xml.etree.ElementTree import iselement
 from rich.style import Style
 from rich.table import Table
 from rich.panel import Panel
 from rich.tree import Tree
 from rich.live import Live
 from rich.text import Text
+import plotext as plt
 
 
 
@@ -110,11 +110,14 @@ class Console(object):
 			'h'		: self.help,
 			'A'		: self.about,
 			'\n'	: lambda c: L.console(),	# 1 empty line
+			'\r'	: lambda c: L.console(),	# 1 empty line
 			'\x03'  : self.shutdownCSE,			# See handler below
 			'c'		: self.configuration,
 			'C'		: self.clearScreen,
 			'D'		: self.deleteResource,
 			'E'		: self.exportResources,
+			'\x07'	: self.continuesPlotGraph,
+			'G'		: self.plotGraph,
 			'i'		: self.inspectResource,
 			'I'		: self.inspectResourceChildren,
 			'k'		: self.katalogScripts,
@@ -178,6 +181,8 @@ class Console(object):
 			('C', 'Clear the console screen'),
 			('D', 'Delete resource'),
 			('E', 'Export resource tree to *init* directory'),
+			('G', 'Plot graph (only for container)'),
+			('^G', 'Plot & refresh graph continuously (only for container)'),
 			('i', 'Inspect resource'),
 			('I', 'Inspect resource and child resources'),
 			('k', 'Catalog of scripts'),
@@ -330,13 +335,15 @@ Available under the BSD 3-Clause License
 		L.console()
 
 
+	previousTreeRi = ''
 	def childResourceTree(self, _:str) -> None:
 		"""	Render the CSE's resource tree, beginning with a child resource.
 		"""
 		L.console('Child Resource Tree', isHeader = True)
 		L.off()
 		
-		if not (ri := L.consolePrompt('ri')):
+		if not (ri := L.consolePrompt('ri', default = Console.previousTreeRi)):
+			Console.previousTreeRi = ri
 			L.console()
 		elif len(ri) > 0:
 			if tree := self.getResourceTreeRich(parent = ri):
@@ -424,13 +431,15 @@ Available under the BSD 3-Clause License
 		L.on()
 
 
+	previousInspectRi = ''
 	def inspectResource(self, _:str) -> None:
 		"""	Show a resource.
 		"""
 		L.console('Inspect Resource', isHeader = True)
 		L.off()
 
-		if (ri := L.consolePrompt('ri')):
+		if (ri := L.consolePrompt('ri', default = Console.previousInspectRi)):
+			Console.previousInspectRi = ri
 			if not (res := CSE.dispatcher.retrieveResource(ri)).resource:
 				L.console(res.dbg, isError = True)
 			else:
@@ -438,12 +447,14 @@ Available under the BSD 3-Clause License
 		L.on()		
 
 
+	previosInspectChildrenRi = ''
 	def inspectResourceChildren(self, _:str) -> None:
 		"""	Show a resource and its children.
 		"""
 		L.console('Inspect Resource and Children', isHeader = True)
 		L.off()		
-		if (ri := L.consolePrompt('ri')):
+		if (ri := L.consolePrompt('ri', default = Console.previosInspectChildrenRi)):
+			Console.previosInspectChildrenRi = ri
 			if not (res := CSE.dispatcher.retrieveResource(ri)).resource:
 				L.console(res.dbg, isError = True)
 			else: 
@@ -539,6 +550,88 @@ Available under the BSD 3-Clause License
 		"""
 		webbrowser.open(f'{CSE.httpServer.serverAddress}?open')
 
+
+	def _plotGraph(self, resource:Resource) -> None:
+			
+		# plot
+		try:
+			cins = CSE.dispatcher.directChildResources(resource.ri, T.CIN)
+			x = range(1, (lcins := len(cins)) + 1)
+			y = [ float(each.con) for each in cins ]
+			cols, rows = plt.terminal_size()
+
+			plt.canvas_color('default')
+			plt.axes_color('default')
+			plt.ticks_color(L.terminalStyleRGBTupple)
+			plt.frame(True)
+			plt.plot_size(None, rows/2)
+			plt.xticks([1, int(lcins/4), int(lcins/4) * 2, int(lcins/4) * 3, lcins])
+
+			plt.title(f'{resource[Resource._srn]} ({resource.ri})')
+			plt.plot(x, y, color = L.terminalStyleRGBTupple)
+			plt.show()
+			plt.clear_figure()
+		except Exception as e:
+			L.logErr(str(e), exc = e)
+		
+
+	previousGraphRi = ''
+	def plotGraph(self, _:str) -> None:
+		L.console('Plot Graph', isHeader = True)
+		L.off()		
+		if (ri := L.consolePrompt('Container ri', default = Console.previousGraphRi)):
+			Console.previousGraphRi = ri
+			if not (res := CSE.dispatcher.retrieveResource(ri)).resource:
+				L.console(res.dbg, isError = True)
+			else:
+				if res.resource.ty != T.CNT:
+					L.console('resource must be a <container>', isError = True)
+				self._plotGraph(res.resource)
+		L.on()
+
+
+	def continuesPlotGraph(self, key:str) -> None:
+
+		pri:str = None
+
+		def _plot(resource:Resource) -> bool:
+			if resource.ri != pri:	# filter only the container we want to observe
+				return True
+			self.clearScreen(None)
+			L.console('Plot Graph', isHeader = True)
+			self._plotGraph(resource)
+			return True
+
+		L.off()
+		if (ri := L.consolePrompt('Container ri', default = Console.previousGraphRi)):
+			Console.previousGraphRi = ri
+			if not (res := CSE.dispatcher.retrieveResource(ri)).resource:
+				L.console(res.dbg, isError = True)
+			else:
+				if res.resource.ty != T.CNT:
+					L.console('resource must be a <container>', isError = True)
+			
+				# Register for chil-added event (which would lead to a re-drawing of the graph)
+				CSE.event.addHandler(CSE.event.createChildResource,  _plot)		# type:ignore [attr-defined]
+
+				# Remember the parent ri
+				pri = res.resource.ri
+
+				# Plot grapth for the first time
+				_plot(res.resource)	
+
+				# Wait for any keypress
+				self.interruptContinous = False
+				while waitForKeypress(self.refreshInterval) is None:
+					if self.interruptContinous:
+						break
+
+				# Remove the event callback for the events 
+				CSE.event.removeHandler(CSE.event.createChildResource, _plot)	# type:ignore[attr-defined]
+				self.clearScreen(key)
+
+		# Reset the screen and logging
+		L.on()
 
 
 	#########################################################################

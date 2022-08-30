@@ -15,7 +15,8 @@ from threading import Lock
 from tinydb.utils import V
 
 from ..etc.Constants import Constants as C
-from ..etc.Types import CSERequest, ContentSerializationType, MissingData, ResourceTypes, Result, NotificationContentType, NotificationEventType, ResponseStatusCode as RC
+from ..etc.Types import CSERequest, ContentSerializationType, MissingData, ResourceTypes, Result, NotificationContentType, NotificationEventType
+from ..etc.Types import ResponseStatusCode as RC, EventCategory
 from ..etc.Types import JSON, Parameters
 from ..etc import Utils, DateUtils
 from ..services.Logging import Logging as L
@@ -159,6 +160,69 @@ class NotificationManager(object):
 				self._handleSubscriptionNotification(sub, reason, resource, modifiedAttributes = modifiedAttributes)
 
 
+	def checkPerformBlockingUpdate(self, resource:Resource, originator:str, updatedAttributes:JSON, finished:Callable = None) -> Result:
+		L.isDebug and L.logDebug('check blocking UPDATE')
+
+		# Get blockingUpdate <sub> for this resource , if any
+		subs = self.getSubscriptionsByNetChty(resource.ri, [NotificationEventType.blockingUpdate])
+		
+		# Later: BlockingUpdateDirectChild
+
+		# TODO 2) Prevent or block all other UPDATE request primitives to this target resource.
+
+		for eachSub in subs:
+
+			notification = {
+				'm2m:sgn' : {
+					'nev' : {
+						'net' : NotificationEventType.blockingUpdate.value
+					},
+					'sur' : Utils.spRelRI(eachSub['ri'])
+				}
+			}
+
+			# Check attributes in enc
+			if atr := eachSub['atr']:
+				jsn, _ = Utils.pureResource(updatedAttributes)
+				if len(set(jsn.keys()).intersection(atr)) == 0:	# if the intersection between updatedAttributes and the enc/atr contains is empty, then continue
+					L.isDebug and L.logDebug(f'skipping <SUB>: {eachSub["ri"]} because configured enc/attribute condition doesn\'t match')
+					continue
+
+			# Don't include virtual resources
+			if not resource.isVirtual():
+				# Add representation
+				Utils.setXPath(notification, 'm2m:sgn/nev/rep', updatedAttributes)
+				
+
+			# Send notification and handle possible negative response status codes
+			if not (res := self._sendRequest(eachSub['nus'][0], notification)).status:
+				return res	# Something else went wrong
+			if res.rsc == RC.OK:
+				if finished:
+					finished()
+				continue
+
+			# Modify the result status code for some failure response status codes
+			if res.rsc == RC.targetNotReachable:
+				res.dbg = L.logDebug(f'remote entity not reachable: {eachSub["nus"][0]}')
+				res.rsc = RC.remoteEntityNotReachable
+				res.status = False
+				return res
+			elif res.rsc == RC.operationNotAllowed:
+				res.dbg = L.logDebug(f'operation denied by remote entity: {eachSub["nus"][0]}')
+				res.rsc = RC.operationDeniedByRemoteEntity
+				res.status = False
+				return res
+			
+			# General negative response status code
+			res.status = False
+			return res
+
+		# TODO 5) Allow all other UPDATE request primitives for this target resource.
+
+		return Result.successResult()
+
+
 	def checkPerformBlockingRetrieve(self, resource:Resource, originator:str, request:CSERequest, finished:Callable = None) -> Result:
 		# TODO originator in notification?
 		# TODO check notify permission for originator
@@ -222,16 +286,17 @@ class NotificationManager(object):
 			}
 			# Don't include virtual resources
 			if not resource.isVirtual():
+				# Add representation
 				Utils.setXPath(notification, 'm2m:sgn/nev/rep', resource.asDict())
 
 			if not (res := self._sendRequest(eachSub['nus'][0], notification)).status:
+				# TODO: correct RSC according to 7.3.2.9 - see above!
 				return res
 			if finished:
 				finished()
 
 		return Result.successResult()
 
-		# pass
 
 	###########################################################################
 	#
@@ -291,7 +356,10 @@ class NotificationManager(object):
 			originator and Utils.setXPath(verificationRequest, 'm2m:sgn/cr', originator)
 	
 			if not (res := self._sendRequest(uri, verificationRequest, noAccessIsError = True)).status:
-				L.isDebug and L.logDebug(f'Verification request failed for: {uri}: {res.dbg}')
+				L.isDebug and L.logDebug(f'Sending verification request failed for: {uri}: {res.dbg}')
+				return False
+			if res.rsc != RC.OK:
+				L.isDebug and L.logDebug(f'Verification notification response if not OK: {res.rsc} for: {uri}: {res.dbg}')
 				return False
 			return True
 
@@ -470,7 +538,7 @@ class NotificationManager(object):
 		return True
 
 
-	def _sendSubscriptionAggregatedBatchNotification(self, ri:str, nu:str, ln:bool=False) -> bool:
+	def _sendSubscriptionAggregatedBatchNotification(self, ri:str, nu:str, ln:bool = False) -> bool:
 		"""	Send and remove(!) the available BatchNotifications for an ri & nu.
 		"""
 		with self.lockBatchNotification:
@@ -478,7 +546,7 @@ class NotificationManager(object):
 
 			# Collect the stored notifications for the batch and aggregate them
 			notifications = []
-			for notification in sorted(CSE.storage.getBatchNotifications(ri, nu), key=lambda x: x['tstamp']):	# type: ignore[no-any-return] # sort by timestamp added
+			for notification in sorted(CSE.storage.getBatchNotifications(ri, nu), key = lambda x: x['tstamp']):	# type: ignore[no-any-return] # sort by timestamp added
 				if n := Utils.findXPath(notification['request'], 'sgn'):
 					notifications.append(n)
 			if len(notifications) == 0:	# This can happen when the subscription is deleted and there are no outstanding notifications
@@ -487,7 +555,7 @@ class NotificationManager(object):
 			additionalParameters = None
 			if ln:
 				notifications = notifications[-1:]
-				additionalParameters = { C.hfcEC : C.hfvECLatest }
+				additionalParameters = { 'ec' : str(EventCategory.Latest.value) }	# event category
 
 			# Aggregate and send
 			notificationRequest = {
@@ -500,13 +568,14 @@ class NotificationManager(object):
 			#		 if it is a resource. only determine which poa and the ct later (ie here).
 			#
 
-			if not self._sendRequest(nu, notificationRequest, parameters = additionalParameters).status:
-				L.isWarn and L.logWarn('Error sending aggregated batch notifications')
-				return False
-
 			# Delete old notifications
 			if not CSE.storage.removeBatchNotifications(ri, nu):
 				L.isWarn and L.logWarn('Error removing aggregated batch notifications')
+				return False
+
+			# Send the request
+			if not self._sendRequest(nu, notificationRequest, parameters = additionalParameters).status:
+				L.isWarn and L.logWarn('Error sending aggregated batch notifications')
 				return False
 
 			return True

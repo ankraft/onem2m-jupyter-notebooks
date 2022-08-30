@@ -16,6 +16,7 @@ setup(
 		'InquirerPy',
 		'isodate', 
 		'paho-mqtt',
+		'plotext',
 		'requests', 
 		'rich', 
 		'tinydb'

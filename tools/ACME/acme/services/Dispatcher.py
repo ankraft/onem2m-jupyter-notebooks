@@ -578,6 +578,7 @@ class Dispatcher(object):
 		# send a create event
 		CSE.event.createResource(resource)	# type: ignore
 
+
 		if parentResource:
 			parentResource = parentResource.dbReload().resource		# Read the resource again in case it was updated in the DB
 			if not parentResource:
@@ -585,6 +586,9 @@ class Dispatcher(object):
 				self.deleteResource(resource)
 				return Result.errorResult(rsc = RC.internalServerError, dbg = dbg)
 			parentResource.childAdded(resource, originator)			# notify the parent resource
+
+			# Send event for parent resource
+			CSE.event.createChildResource(parentResource)	# type: ignore
 
 		return Result(status = True, resource = resource, rsc = RC.created) 	# everything is fine. resource created.
 
@@ -691,6 +695,8 @@ class Dispatcher(object):
 		"""
 		L.isDebug and L.logDebug(f'Updating resource ri: {resource.ri}, type: {resource.ty}')
 		if doUpdateCheck:
+			if not (res := resource.willBeUpdated(dct, originator)).status:
+				return res
 			if not (res := resource.update(dct, originator)).status:
 				# return res.errorResultCopy()
 				return res

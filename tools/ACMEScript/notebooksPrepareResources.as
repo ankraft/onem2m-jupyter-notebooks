@@ -112,8 +112,8 @@ endProcedure
 #
 #	Check and create resources depending on the notebook's name
 #
-print
-print Performing initializations for lecture *[argv 1]*
+#print
+#print Performing initializations for lecture *[argv 1]*
 
 switch [lower [argv 1]]
 	case introduction

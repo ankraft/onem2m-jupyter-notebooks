@@ -3,10 +3,20 @@ hide footbox
 !theme plain
 skinparam backgroundcolor transparent
 
-participant "Notebook\nAE" as AE 
-participant "CSE" as CSE 
+' Turquoise #668c97
+' Orange #F6921E
 
-AE -> CSE: CREATE <group>\ncse-in/Notebook-AE
-AE <- CSE: Response
+participant "Notebook\nAE" as AE 
+box "CSE & Hosted Resources" #f8f8f8
+participant "CSE" as CSE 
+participant "container_1" as container_1 #F6921E
+participant "container_2" as container_2 #F6921E
+end box
+
+
+AE -> CSE ++: CREATE <group>\ncse-in/Notebook-AE
+CSE <--> container_1: Validate and add\nGroup Member
+CSE <--> container_2: Validate and add\nGroup Member
+AE <- CSE --: Response
 
 @enduml

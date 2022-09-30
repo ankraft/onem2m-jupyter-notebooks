@@ -30,7 +30,7 @@ This repository contains a number of [Jupyter Notebooks][jupyter] that give a pr
 > **Note**  
 > Changing these configurations is only necessary when you run your own CSE and Notification Server instead the one provided with the notebooks.
 
-Please change the configuration in the file [config.py](config.py) according to your setup.
+Please change the configuration in the file [config.py](src/config.py) according to your setup.
 
 #### CSE Configuration
 - **cseRN** : The resource name of the CSE.
@@ -134,4 +134,4 @@ These Notebooks are available under the BSD 3-Clause License.
 [binderBadge]: https://mybinder.org/badge_logo.svg
 [twitterBadge]: https://img.shields.io/twitter/url/https/twitter.com/acmeCSE.svg?style=social&label=%40acmeCSE
 
-[nbbinder]: https://mybinder.org/v2/gh/ankraft/onem2m-jupyter-notebooks/master?urlpath=lab/tree/__START__.ipynb
+[nbbinder]: https://mybinder.org/v2/gh/oneM2M/onem2m-jupyter-notebooks/master?urlpath=lab/tree/__START__.ipynb

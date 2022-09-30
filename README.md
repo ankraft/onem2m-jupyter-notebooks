@@ -135,3 +135,4 @@ These Notebooks are available under the BSD 3-Clause License.
 [twitterBadge]: https://img.shields.io/twitter/url/https/twitter.com/acmeCSE.svg?style=social&label=%40acmeCSE
 
 [nbbinder]: https://mybinder.org/v2/gh/oneM2M/onem2m-jupyter-notebooks/master?urlpath=lab/tree/__START__.ipynb
+<!-- [nbbinder]: https://mybinder.org/v2/gh/ankraft/onem2m-jupyter-notebooks/master?urlpath=lab/tree/__START__.ipynb -->

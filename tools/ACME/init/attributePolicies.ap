@@ -1506,7 +1506,7 @@
 	// EXPERIMENTAL
 	"ma": [
 		{
-			"rtypes": [ "SUB", "SUB", "REQRESP" ],
+			"rtypes": [ "SUB", "REQRESP" ],
 			"lname": "maxAge",
 			"ns": "m2m",
 			"type": "duration",

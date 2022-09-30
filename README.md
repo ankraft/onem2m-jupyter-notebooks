@@ -30,7 +30,7 @@ This repository contains a number of [Jupyter Notebooks][jupyter] that give a pr
 > **Note**  
 > Changing these configurations is only necessary when you run your own CSE and Notification Server instead the one provided with the notebooks.
 
-Please change the configuration in the file [config.py](config.py) according to your setup.
+Please change the configuration in the file [config.py](src/config.py) according to your setup.
 
 #### CSE Configuration
 - **cseRN** : The resource name of the CSE.

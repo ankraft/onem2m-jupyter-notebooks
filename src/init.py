@@ -8,6 +8,7 @@
 
 import datetime, random, re, sys, time, threading, os, shlex
 import http.client
+from typing import Union, Dict
 from enum import IntEnum
 from json import loads, dumps
 import IPython.display
@@ -328,7 +329,7 @@ Please restart this notebook kernel in case you will update the configuration fi
 """, msg)
 
 
-def getResourceTreeHtml(section:bool, title:str) -> None:
+def getResourceTreeHtml(section:bool, title:str) -> str:
     if (resp := requests.get(f'{host}/__structure__/text')).status_code == 200:
 
         return f"""<div style="background-color:transparent;border:2px #444 solid;padding:10px;width:calc(100% - 100px);margin-top:20px;border-radius:10px;">
@@ -365,7 +366,7 @@ def _sendRequest(method, **parameters) -> str:
     global __response, __responseStatusCode, __verbose, __oauthToken
     __response = None
     headers = {}
-    rqp = {}
+    rqp:Dict[str, Union[str, int]] = {}
     fc = {} # filter criteria
 
     """ Check and update the given parameters, and send a request with the given method.
@@ -375,9 +376,17 @@ def _sendRequest(method, **parameters) -> str:
     rqp['op'] = _operationMapping[method]
 
     # check and extract some parameters. Most parameters need individual handling.
-    if (to := parameters.pop('to', None)) is None:
+
+    # Handle to or _to. _to takes preference later
+    to = parameters.pop('to', None)
+    _to = parameters.pop('_to', None)
+    if to is None and _to is None:
         return '<b>to</b> parameter is missing'
+    if all([to, _to]):
+        return 'Only one of <b>to</b> and <b>_to</b> must be given'
     rqp['to'] = to
+    if _to is not None:
+        rqp['_to'] = _to
 
     if (originator := parameters.pop('originator', None)) is None:
         return '<b>originator</b> parameter is missing'
@@ -495,8 +504,13 @@ def _sendRequest(method, **parameters) -> str:
                 __oauthToken = token
                 headers['Authorization'] = f'Bearer {__oauthToken.token}'
             
+            # Take precedence of _to over to argument 
             args = f'?{args}' if len(args) > 0 else ''
-            url = f'{host}{to}{args}'
+            if _to is not None:
+                url = f'{_to}{args}'
+            else:
+                url = f'{host}{to}{args}'
+            
             if primitiveContent is not None:
                 resp = method(url, headers=headers, data=primitiveContent)
             else:

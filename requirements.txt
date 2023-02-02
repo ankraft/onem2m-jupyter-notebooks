@@ -31,7 +31,7 @@ bleach==5.0.1
     # via nbconvert
 cbor2==5.4.3
     # via oneM2M-jupyter-notebooks (setup.py)
-certifi==2022.6.15
+certifi==2022.12.7
     # via requests
 cffi==1.15.1
     # via argon2-cffi-bindings

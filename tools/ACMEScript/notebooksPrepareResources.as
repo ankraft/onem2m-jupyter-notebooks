@@ -67,6 +67,28 @@ endProcedure
 
 
 #
+# Check and create a first container under demo AE
+#
+procedure checkContainer_1
+	checkResource [cse.rn]/Notebook-AE/Container_1
+	if [!= [result] 2000]
+		create [cse.rn]/Notebook-AE
+			{
+				"m2m:cnt": {
+					"rn": "Container_1"
+				}
+			}
+		if [!= [response.status] 2001]
+			logError Error creating Container: [response.resource]
+			quitWithError
+		endIf
+		print Created <container>: Container_1
+	endif 
+endProcedure
+
+
+
+#
 # Check and create a second container under demo AE
 #
 procedure checkContainer_2
@@ -126,7 +148,7 @@ switch [lower [argv 1]]
 		addContentInstances
 	case groups
 		checkAE
-		checkContainer
+		checkContainer_1
 		checkContainer_2
 	case acp
 		checkAE

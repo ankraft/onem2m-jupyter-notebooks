@@ -9,14 +9,14 @@ skinparam backgroundcolor transparent
 participant "Notebook\nAE" as AE 
 box "CSE & Hosted Resources" #f8f8f8
 participant "CSE" as CSE 
-participant "container_1" as container_1 #F6921E
-participant "container_2" as container_2 #F6921E
+participant "Notebook-AE-1\nContainer-1" as container1 #F6921E
+participant "Notebook-AE-2\nContainer-2" as container2 #F6921E
 end box
 
 
-AE -> CSE ++: CREATE <group>\ncse-in/Notebook-AE
-CSE <--> container_1: Validate and add\nGroup Member
-CSE <--> container_2: Validate and add\nGroup Member
+AE -> CSE ++: CREATE <group>\ncse-in
+CSE <--> container1: Validate and add\n<cnt> to Group
+CSE <--> container2: Validate and add\n<cnt> to Group
 AE <- CSE --: Response
 
 @enduml

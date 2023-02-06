@@ -22,7 +22,7 @@ endProcedure [response.status]
 
 
 #
-# Check and create demo AE
+# Check and create demo AE's
 #
 procedure checkAE
 	checkResource [cse.rn]/Notebook-AE
@@ -45,8 +45,50 @@ procedure checkAE
 endProcedure
 
 
+procedure checkAE_1
+	checkResource [cse.rn]/Notebook-AE-1
+	if [!= [result] 2000]
+		create [cse.rn]
+			{
+				"m2m:ae": {
+					"rn": "Notebook-AE-1",
+					"api": "NnotebookAE",
+					"rr": true,
+					"srv": \[ "3" ]
+				}
+			}
+		if [!= [response.status] 2001]
+			logError Error creating AE: [response.resource]
+			quitWithError
+		endIf
+		print Created <AE>: Notebook-AE-1
+	endif 
+endProcedure
+
+
+procedure checkAE_2
+	checkResource [cse.rn]/Notebook-AE-2
+	if [!= [result] 2000]
+		create [cse.rn]
+			{
+				"m2m:ae": {
+					"rn": "Notebook-AE-2",
+					"api": "NnotebookAE",
+					"rr": true,
+					"srv": \[ "3" ]
+				}
+			}
+		if [!= [response.status] 2001]
+			logError Error creating AE: [response.resource]
+			quitWithError
+		endIf
+		print Created <AE>: Notebook-AE-2
+	endif 
+endProcedure
+
+
 #
-# Check and create container under demo AE
+# Check and create containers under demo AE's
 #
 procedure checkContainer
 	checkResource [cse.rn]/Notebook-AE/Container
@@ -66,38 +108,31 @@ procedure checkContainer
 endProcedure
 
 
-#
-# Check and create a first container under demo AE
-#
 procedure checkContainer_1
-	checkResource [cse.rn]/Notebook-AE/Container_1
+	checkResource [cse.rn]/Notebook-AE-1/Container-1
 	if [!= [result] 2000]
-		create [cse.rn]/Notebook-AE
+		create [cse.rn]/Notebook-AE-1
 			{
 				"m2m:cnt": {
-					"rn": "Container_1"
+					"rn": "Container-1"
 				}
 			}
 		if [!= [response.status] 2001]
 			logError Error creating Container: [response.resource]
 			quitWithError
 		endIf
-		print Created <container>: Container_1
+		print Created <container>: Container-1
 	endif 
 endProcedure
 
 
-
-#
-# Check and create a second container under demo AE
-#
 procedure checkContainer_2
-	checkResource [cse.rn]/Notebook-AE/Container_2
+	checkResource [cse.rn]/Notebook-AE-2/Container-2
 	if [!= [result] 2000]
-		create [cse.rn]/Notebook-AE
+		create [cse.rn]/Notebook-AE-2
 			{
 				"m2m:cnt": {
-					"rn": "Container_2"
+					"rn": "Container-2"
 				}
 			}
 		if [!= [response.status] 2001]
@@ -147,8 +182,11 @@ switch [lower [argv 1]]
 		checkContainer
 		addContentInstances
 	case groups
-		checkAE
+		originator Cmyself_1
+		checkAE_1
 		checkContainer_1
+		originator Cmyself_2
+		checkAE_2
 		checkContainer_2
 	case acp
 		checkAE

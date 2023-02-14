@@ -9,14 +9,14 @@ skinparam backgroundcolor transparent
 participant "Notebook\nAE" as AE 
 box "CSE & Hosted Resources" #f8f8f8
 participant "CSE" as CSE 
-participant "Notebook-AE-1\nContainer-1" as container1 #F6921E
-participant "Notebook-AE-2\nContainer-2" as container2 #F6921E
+participant "StreetLight-AE-1\nLight-Container-1" as container1 #F6921E
+participant "StreetLight-AE-2\nLight-Container-2" as container2 #F6921E
 end box
 
-AE -> CSE ++: RETRIEVE <containers>\ncse-in/aGroup/fopt
-CSE -> container1 ++: RETRIEVE <container>\ncse-in/Notebook-AE-1/Container-1
+AE -> CSE ++: RETRIEVE <containers>\ncse-in/Lights-Group/fopt
+CSE -> container1 ++: RETRIEVE <container>\ncse-in/StreetLight-AE-1/Light-Container-1
 CSE <- container1 --: Response
-CSE -> container2 ++: RETRIEVE <container>\ncse-in/Notebook-AE-2/Container-2
+CSE -> container2 ++: RETRIEVE <container>\ncse-in/StreetLight-AE-2/Light-Container-2
 CSE <- container2 --: Response
 AE <- CSE --: Response (Aggregated)
 

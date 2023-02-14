@@ -66,13 +66,13 @@ procedure checkAE_1
 endProcedure
 
 
-procedure checkAE_2
-	checkResource [cse.rn]/Notebook-AE-2
+procedure checkLightAE_1
+	checkResource [cse.rn]/StreetLight-AE-1
 	if [!= [result] 2000]
 		create [cse.rn]
 			{
 				"m2m:ae": {
-					"rn": "Notebook-AE-2",
+					"rn": "StreetLight-AE-1",
 					"api": "NnotebookAE",
 					"rr": true,
 					"srv": \[ "3" ]
@@ -82,7 +82,29 @@ procedure checkAE_2
 			logError Error creating AE: [response.resource]
 			quitWithError
 		endIf
-		print Created <AE>: Notebook-AE-2
+		print Created <AE>: StreetLight-AE-1
+	endif 
+endProcedure
+
+
+
+procedure checkLightAE_2
+	checkResource [cse.rn]/StreetLight-AE-2
+	if [!= [result] 2000]
+		create [cse.rn]
+			{
+				"m2m:ae": {
+					"rn": "StreetLight-AE-2",
+					"api": "NnotebookAE",
+					"rr": true,
+					"srv": \[ "3" ]
+				}
+			}
+		if [!= [response.status] 2001]
+			logError Error creating AE: [response.resource]
+			quitWithError
+		endIf
+		print Created <AE>: StreetLight-AE-2
 	endif 
 endProcedure
 
@@ -108,38 +130,38 @@ procedure checkContainer
 endProcedure
 
 
-procedure checkContainer_1
-	checkResource [cse.rn]/Notebook-AE-1/Container-1
+procedure checkLightContainer_1
+	checkResource [cse.rn]/StreetLight-AE-1/Light-Container-1
 	if [!= [result] 2000]
-		create [cse.rn]/Notebook-AE-1
+		create [cse.rn]/StreetLight-AE-1
 			{
 				"m2m:cnt": {
-					"rn": "Container-1"
+					"rn": "Light-Container-1"
 				}
 			}
 		if [!= [response.status] 2001]
 			logError Error creating Container: [response.resource]
 			quitWithError
 		endIf
-		print Created <container>: Container-1
+		print Created <container>: Light-Container-1
 	endif 
 endProcedure
 
 
-procedure checkContainer_2
-	checkResource [cse.rn]/Notebook-AE-2/Container-2
+procedure checkLightContainer_2
+	checkResource [cse.rn]/StreetLight-AE-1/Light-Container-2
 	if [!= [result] 2000]
-		create [cse.rn]/Notebook-AE-2
+		create [cse.rn]/StreetLight-AE-2
 			{
 				"m2m:cnt": {
-					"rn": "Container-2"
+					"rn": "Light-Container-2"
 				}
 			}
 		if [!= [response.status] 2001]
 			logError Error creating Container: [response.resource]
 			quitWithError
 		endIf
-		print Created <container>: Container_2
+		print Created <container>: Light-Container-2
 	endif 
 endProcedure
 
@@ -183,11 +205,11 @@ switch [lower [argv 1]]
 		addContentInstances
 	case groups
 		originator Cmyself_1
-		checkAE_1
-		checkContainer_1
+		checkLightAE_1
+		checkLightContainer_1
 		originator Cmyself_2
-		checkAE_2
-		checkContainer_2
+		checkLightAE_2
+		checkLightContainer_2
 	case acp
 		checkAE
 	case flexcontainer

@@ -211,7 +211,12 @@ switch [lower [argv 1]]
 		checkLightAE_2
 		checkLightContainer_2
 	case acp
-		checkAE
+        originator CstreetLight-AE-1
+		checkLightAE_1
+		checkLightContainer_1
+        originator CstreetLight-AE-2
+		checkLightAE_2
+		checkLightContainer_2
 	case flexcontainer
 		checkAE
 	case subscriptions

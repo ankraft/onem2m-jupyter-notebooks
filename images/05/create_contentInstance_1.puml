@@ -10,11 +10,9 @@ participant "Notebook\nAE" as AE
 box "CSE & Hosted Resources" #f8f8f8
 participant "StreetLight-AE-1\nLight-Container-1" as container1 
 participant "StreetLight-AE-2\nLight-Container-2" as container2 
-participant "Streetlight-ACP-2" as acp2 
 end box
 
-AE -> container2 ++: UPDATE <container>\ncse-in/StreetLight-AE-2/Light-Container-2
-container2 -->> acp2: associated
-AE <- container2 --: Response
+AE -> container1 ++: CREATE <contentInstance>\ncse-in/StreetLight-AE-1/Light-Container-1
+AE <- container1 --: Response
 
 @enduml

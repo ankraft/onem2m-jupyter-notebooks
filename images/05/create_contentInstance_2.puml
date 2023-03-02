@@ -11,10 +11,12 @@ box "CSE & Hosted Resources" #f8f8f8
 participant "StreetLight-AE-1\nLight-Container-1" as container1 
 participant "StreetLight-AE-2\nLight-Container-2" as container2 
 participant "Streetlight-ACP-2" as acp2 
+
 end box
 
-AE -> container2 ++: UPDATE <container>\ncse-in/StreetLight-AE-2/Light-Container-2
-container2 -->> acp2: associated
+AE -> container2 ++: CREATE <contentInstance>\ncse-in/StreetLight-AE-2/Light-Container-2
+container2 -> acp2 ++: Check privileges
+container2 <- acp2 --: Access granted
 AE <- container2 --: Response
 
 @enduml

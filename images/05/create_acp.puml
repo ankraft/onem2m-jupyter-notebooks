@@ -14,7 +14,7 @@ participant "Streetlight-ACP-2" as acp2
 
 end box
 
-AE -> container2 ++: CREATE <ACP>\ncse-in/StreetLight-AE-2
+AE -> container2 ++: CREATE <ACP>\ncse-in/StreetLight-AE-2\n<font color="#5555ff">Originator: CstreetLight-AE-2
 container2 -->> acp2: created 
 AE <- container2 --: Response
 

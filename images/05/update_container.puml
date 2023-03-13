@@ -13,7 +13,7 @@ participant "StreetLight-AE-2\nLight-Container-2" as container2
 participant "Streetlight-ACP-2" as acp2 
 end box
 
-AE -> container2 ++: UPDATE <container>\ncse-in/StreetLight-AE-2/Light-Container-2
+AE -> container2 ++: UPDATE <container>\ncse-in/StreetLight-AE-2/Light-Container-2\n<font color="#5555ff">Originator: CstreetLight-AE-2
 container2 -->> acp2: associated
 AE <- container2 --: Response
 

@@ -14,7 +14,7 @@ participant "Streetlight-ACP-2" as acp2
 
 end box
 
-AE -> container2 ++: CREATE <contentInstance>\ncse-in/StreetLight-AE-2/Light-Container-2
+AE -> container2 ++: CREATE <contentInstance>\ncse-in/StreetLight-AE-2/Light-Container-2\n<font color="#5555ff">Originator: CstreetLight-AE-1
 container2 -> acp2 ++: Check privileges
 container2 <- acp2 --: Access granted
 AE <- container2 --: Response

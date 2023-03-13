@@ -12,7 +12,7 @@ participant "StreetLight-AE-1\nLight-Container-1" as container1
 participant "StreetLight-AE-2\nLight-Container-2" as container2 
 end box
 
-AE -> container2 ++: CREATE <contentInstance>\ncse-in/StreetLight-AE-2/Light-Container-2
+AE -> container2 ++: CREATE <contentInstance>\ncse-in/StreetLight-AE-2/Light-Container-2\n<font color="#5555ff">Originator: CstreetLight-AE-1
 container2 -> container2: No access
 AE <[#ff0000]- container2 --: <font color="red">Response (Error)</font>
 

@@ -12,9 +12,5 @@ participant "CSE" as CSE
 
 participant "Streetlight-2\nAE" as AE2
 
-AE1 -> CSE: CREATE <contentInstance>\ncse-in/StreetLight-AE-2/Light-Container-2
-AE1 <- CSE: Response
-CSE -> NS: NOTIFY <notification>
-CSE <- NS: Response
 
 @enduml

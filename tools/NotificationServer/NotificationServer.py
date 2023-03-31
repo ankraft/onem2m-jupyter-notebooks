@@ -35,6 +35,7 @@ from acme.etc.Constants import Constants as C
 
 port = 9999	# Change this variable to specify another port.
 messageColor = 'spring_green2'
+messageColor2 = 'blue1'
 errorColor = 'red'
 
 failVerification = False
@@ -64,7 +65,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
 		post_data = self.rfile.read(length)
 
 		# Print the content data
-		console.print(f'[{messageColor}]### Notification (http)')
+		console.print(f'[{messageColor}]### Received Notification (http)')
 		console.print(self.headers, highlight = False)
 
 		# delay response
@@ -105,7 +106,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
 		
 		# Print HTTP Response
 		# This looks a it more complicated but is necessary to render nicely in Jupyter
-		console.print(f'[{messageColor}]### Notification Response (http)')
+		console.print(f'[{messageColor2}]### Sent Notification Response (http)')
 		console.print(email.parser.Parser(_class = HTTPMessage).parsestr(b''.join(_responseHeaders).decode('iso-8859-1')), highlight = False)
 
 

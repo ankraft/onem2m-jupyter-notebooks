@@ -3,15 +3,19 @@ hide footbox
 !theme plain
 skinparam backgroundcolor transparent
 
-box Application #f8f8f8
-participant "Notebook\nAE" as AE 
-participant "Notification\nServer" as NS
+box "Streetlight 1 Notebooks" #f8f8f8
+participant "Streetlight-1\nAE" as AE1
+participant "Notification\nReceiver" as NS
 end box
+
 participant "CSE" as CSE 
 
-AE -> CSE: CREATE <subscription>\ncse-in/Notebook-AE_2/Container
+participant "Streetlight-2\nAE" as AE2
+
+
+AE1 -> CSE: CREATE <subscription>\ncse-in/StreetLight-AE-2/Light-Container-2
 CSE -> NS: NOTIFY <notification>\nverification notification
 CSE <- NS: Response
-AE <- CSE: Response
+AE1 <- CSE: Response
 
 @enduml

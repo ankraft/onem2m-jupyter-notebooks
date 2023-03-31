@@ -149,7 +149,7 @@ endProcedure
 
 
 procedure checkLightContainer_2
-	checkResource [cse.rn]/StreetLight-AE-1/Light-Container-2
+	checkResource [cse.rn]/StreetLight-AE-2/Light-Container-2
 	if [!= [result] 2000]
 		create [cse.rn]/StreetLight-AE-2
 			{
@@ -164,6 +164,53 @@ procedure checkLightContainer_2
 		print Created <container>: Light-Container-2
 	endif 
 endProcedure
+
+
+procedure checkLightACP_2
+    checkResource [cse.rn]/StreetLight-AE-2/Streetlight-ACP-2
+    if [!= [result] 2000]
+        create [cse.rn]/StreetLight-AE-2
+            {
+                "m2m:acp": {
+                    "rn" : "Streetlight-ACP-2", 
+                    "pv" : {
+                        "acr": \[{
+                            "acor": \["CstreetLight-AE-1"],
+                            "acop": 63
+                        },
+                        {
+                            "acor": \["CstreetLight-AE-2"],
+                            "acop": 63
+                        }]
+                    },
+                    "pvs": {
+                        "acr" : \[{
+                            "acor": \["CstreetLight-AE-2"],
+                            "acop": 63
+                        }]
+                    }
+                }
+            }
+        if [!= [response.status] 2001]
+            logError Error creating ACP: [response.resource]
+            quitWithError
+        endIf
+
+        print Update <AE>: Streetlight-ACP-2
+		    update [cse.rn]/StreetLight-AE-2/Light-Container-2
+            {
+				"m2m:cnt": {
+					"acpi": \["[cse.rn]/StreetLight-AE-2/Streetlight-ACP-2"]
+				}
+			}
+        if [!= [response.status] 2004]
+            logError Error updating AE: [response.resource]
+            quitWithError
+        endIf
+
+    endif 
+endProcedure
+
 
 
 #
@@ -220,8 +267,13 @@ switch [lower [argv 1]]
 	case flexcontainer
 		checkAE
 	case subscriptions
-		checkAE
-		checkContainer
+        originator CstreetLight-AE-1
+		checkLightAE_1
+		checkLightContainer_1
+        originator CstreetLight-AE-2
+		checkLightAE_2
+		checkLightContainer_2
+        checkLightACP_2
 	case
 		print Unknown lecture *[argv 1]*
 		quitWithError

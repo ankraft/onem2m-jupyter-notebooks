@@ -10,7 +10,8 @@ end box
 
 participant "CSE" as CSE 
 
+box "Streetlight 2" #f8f8f8
 participant "Streetlight-2\nAE" as AE2
-
+end box
 
 @enduml

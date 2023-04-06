@@ -10,7 +10,9 @@ end box
 
 participant "CSE" as CSE 
 
+box "Streetlight 2" #f8f8f8
 participant "Streetlight-2\nAE" as AE2
+end box
 
 AE1 -> CSE: CREATE <contentInstance>\ncse-in/StreetLight-AE-2/Light-Container-2
 AE1 <- CSE: Response

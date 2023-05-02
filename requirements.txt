@@ -53,7 +53,7 @@ executing==1.0.0
     # via stack-data
 fastjsonschema==2.16.1
     # via nbformat
-flask==2.2.2
+flask==2.3.2
     # via oneM2M-jupyter-notebooks (setup.py)
 idna==3.3
     # via

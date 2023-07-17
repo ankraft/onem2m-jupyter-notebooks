@@ -522,6 +522,8 @@ def _sendRequest(method, **parameters) -> str:
             __ot = resp.headers['X-M2M-OT'] if resp.headers.get('X-M2M-OT') else None
             
             rsp = {}
+            rsp['to'] = originator
+            rsp['fr'] = to
             rsp['rsc'] = __responseStatusCode
             if __rqi:
                 rsp['rqi'] = __rqi

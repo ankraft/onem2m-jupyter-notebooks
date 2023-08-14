@@ -340,7 +340,7 @@ tinydb==4.7.1
     # via oneM2M-jupyter-notebooks (setup.py)
 tomli==2.0.1
     # via jupyterlab
-tornado==6.3.2
+tornado==6.3.3
     # via
     #   ipykernel
     #   jupyter-client

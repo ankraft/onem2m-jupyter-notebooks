@@ -16,6 +16,10 @@ This repository contains a number of [Jupyter Notebooks][jupyter] that give a pr
 <a name="installation"></a>
 ## Installation and Configuration
 
+> [!Caution]
+> Python 3.12 is not fully supported yet. Please stick to version 3.10.x or 3.11.x for the moment.
+
+
 ### oneM2M Notebooks and Python Packages
 
 - Download or clone this repository to a local directory.

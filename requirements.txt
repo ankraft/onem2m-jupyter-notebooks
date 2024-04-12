@@ -61,7 +61,7 @@ flask==2.3.2
     # via oneM2M-jupyter-notebooks (setup.py)
 fqdn==1.5.1
     # via jsonschema
-idna==3.4
+idna==3.7
     # via
     #   anyio
     #   jsonschema

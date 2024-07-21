@@ -37,7 +37,7 @@ blinker==1.6.2
     # via flask
 cbor2==5.4.6
     # via oneM2M-jupyter-notebooks (setup.py)
-certifi==2023.7.22
+certifi==2024.7.4
     # via requests
 cffi==1.15.1
     # via argon2-cffi-bindings

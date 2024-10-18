@@ -4,7 +4,7 @@
 #
 #    pip-compile
 #
-anyio==4.4.0
+anyio==4.6.2.post1
     # via
     #   httpx
     #   jupyter-server
@@ -32,16 +32,16 @@ bleach==6.1.0
     # via nbconvert
 blinker==1.8.2
     # via flask
-cbor2==5.6.4
+cbor2==5.6.5
     # via oneM2M-jupyter-notebooks (setup.py)
 certifi==2024.8.30
     # via
     #   httpcore
     #   httpx
     #   requests
-cffi==1.17.0
+cffi==1.17.1
     # via argon2-cffi-bindings
-charset-normalizer==3.3.2
+charset-normalizer==3.4.0
     # via requests
 click==8.1.7
     # via flask
@@ -49,13 +49,13 @@ comm==0.2.2
     # via
     #   ipykernel
     #   ipywidgets
-debugpy==1.8.5
+debugpy==1.8.7
     # via ipykernel
 decorator==5.1.1
     # via ipython
 defusedxml==0.7.1
     # via nbconvert
-executing==2.0.1
+executing==2.1.0
     # via stack-data
 fastjsonschema==2.20.0
     # via nbformat
@@ -65,11 +65,11 @@ fqdn==1.5.1
     # via jsonschema
 h11==0.14.0
     # via httpcore
-httpcore==1.0.5
+httpcore==1.0.6
     # via httpx
 httpx==0.27.2
     # via jupyterlab
-idna==3.8
+idna==3.10
     # via
     #   anyio
     #   httpx
@@ -82,14 +82,14 @@ ipykernel==6.29.5
     #   jupyter
     #   jupyter-console
     #   jupyterlab
-ipython==8.27.0
+ipython==8.28.0
     # via
     #   ipykernel
     #   ipywidgets
     #   jupyter-console
 ipywidgets==8.1.5
     # via jupyter
-isodate==0.6.1
+isodate==0.7.2
     # via oneM2M-jupyter-notebooks (setup.py)
 isoduration==20.11.0
     # via jsonschema
@@ -113,11 +113,11 @@ jsonschema[format-nongpl]==4.23.0
     #   jupyter-events
     #   jupyterlab-server
     #   nbformat
-jsonschema-specifications==2023.12.1
+jsonschema-specifications==2024.10.1
     # via jsonschema
 jupyter==1.1.1
     # via oneM2M-jupyter-notebooks (setup.py)
-jupyter-client==8.6.2
+jupyter-client==8.6.3
     # via
     #   ipykernel
     #   jupyter-console
@@ -163,7 +163,7 @@ jupyterlab-widgets==3.0.13
     # via ipywidgets
 markdown-it-py==3.0.0
     # via rich
-markupsafe==2.1.5
+markupsafe==3.0.1
     # via
     #   jinja2
     #   nbconvert
@@ -214,18 +214,18 @@ pexpect==4.9.0
     # via ipython
 pfzy==0.3.4
     # via inquirerpy
-platformdirs==4.2.2
+platformdirs==4.3.6
     # via jupyter-core
-plotext==5.2.8
+plotext==5.3.2
     # via oneM2M-jupyter-notebooks (setup.py)
-prometheus-client==0.20.0
+prometheus-client==0.21.0
     # via jupyter-server
-prompt-toolkit==3.0.47
+prompt-toolkit==3.0.48
     # via
     #   inquirerpy
     #   ipython
     #   jupyter-console
-psutil==6.0.0
+psutil==6.1.0
     # via ipykernel
 ptyprocess==0.7.0
     # via
@@ -272,7 +272,7 @@ rfc3986-validator==0.1.1
     # via
     #   jsonschema
     #   jupyter-events
-rich==13.8.0
+rich==13.9.2
     # via oneM2M-jupyter-notebooks (setup.py)
 rpds-py==0.20.0
     # via
@@ -284,7 +284,6 @@ six==1.16.0
     # via
     #   asttokens
     #   bleach
-    #   isodate
     #   python-dateutil
     #   rfc3339-validator
 sniffio==1.3.1
@@ -301,7 +300,7 @@ terminado==0.18.1
     #   jupyter-server-terminals
 tinycss2==1.3.0
     # via nbconvert
-tinydb==4.8.0
+tinydb==4.8.2
     # via oneM2M-jupyter-notebooks (setup.py)
 tornado==6.4.1
     # via
@@ -327,13 +326,13 @@ traitlets==5.14.3
     #   nbclient
     #   nbconvert
     #   nbformat
-types-python-dateutil==2.9.0.20240821
+types-python-dateutil==2.9.0.20241003
     # via arrow
 typing-extensions==4.12.2
     # via ipython
 uri-template==1.3.0
     # via jsonschema
-urllib3==2.2.2
+urllib3==2.2.3
     # via requests
 wcwidth==0.2.13
     # via prompt-toolkit

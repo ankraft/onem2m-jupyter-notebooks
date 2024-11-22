@@ -302,7 +302,7 @@ tinycss2==1.3.0
     # via nbconvert
 tinydb==4.8.2
     # via oneM2M-jupyter-notebooks (setup.py)
-tornado==6.4.1
+tornado==6.4.2
     # via
     #   ipykernel
     #   jupyter-client

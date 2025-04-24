@@ -63,7 +63,7 @@ flask==3.0.3
     # via oneM2M-jupyter-notebooks (setup.py)
 fqdn==1.5.1
     # via jsonschema
-h11==0.14.0
+h11==0.16.0
     # via httpcore
 httpcore==1.0.6
     # via httpx

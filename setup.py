@@ -16,6 +16,7 @@ setup(
 		'InquirerPy',
 		'isodate', 
 		'paho-mqtt',
+		'pickleshare',
 		'plotext',
 		'requests', 
 		'rich', 

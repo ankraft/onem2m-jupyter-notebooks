@@ -8,7 +8,7 @@ This repository contains a number of [Jupyter Notebooks][jupyter] that give a pr
 
 
 [![Binder][binderBadge]][nbbinder]
-[![Twitter][twitterBadge]][twitter]
+[![Mastodon](https://img.shields.io/badge/-@acmeCSE@mstdn.social-FFF?label=mastodon&logo=mastodon&style=social)](https://mstdn.social/@acmeCSE)  
 
 
 ![images/jupyter-lab.jpg](images/jupyter-lab.jpg)
@@ -133,7 +133,6 @@ These Notebooks are available under the BSD 3-Clause License.
 [ACME]: https://github.com/ankraft/ACME-oneM2M-CSE
 [jupyter]: https://jupyter.org
 [onem2m]: http://www.onem2m.org
-[twitter]: https://twitter.com/acmeCSE
 [binder]: https://mybinder.org
 [binderBadge]: https://mybinder.org/badge_logo.svg
 [twitterBadge]: https://img.shields.io/twitter/url/https/twitter.com/acmeCSE.svg?style=social&label=%40acmeCSE

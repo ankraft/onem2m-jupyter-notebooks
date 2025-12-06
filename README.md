@@ -8,7 +8,8 @@ This repository contains a number of [Jupyter Notebooks][jupyter] that give a pr
 
 
 [![Binder][binderBadge]][nbbinder]
-[![Mastodon](https://img.shields.io/badge/-@acmeCSE@mstdn.social-FFF?label=mastodon&logo=mastodon&style=social)](https://mstdn.social/@acmeCSE)  
+<br />
+[![Homepage](https://img.shields.io/badge/-https%3A%2F%2F%2Facmecse.net-F00?label=ACME%20oneM2M%20CSE%20Homepage&style=flat)](https://acmecse.net)  [![Mastodon](https://img.shields.io/badge/-@acmeCSE@mstdn.social-CCC?label=Mastodon&logo=mastodon&style=flag)](https://mstdn.social/@acmeCSE)  
 
 
 ![images/jupyter-lab.jpg](images/jupyter-lab.jpg)

@@ -32,7 +32,7 @@ bleach[css]==6.3.0
     # via nbconvert
 blinker==1.9.0
     # via flask
-cbor2==5.8.0
+cbor2==5.9.0
     # via oneM2M-jupyter-notebooks (setup.py)
 certifi==2025.11.12
     # via

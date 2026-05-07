@@ -179,7 +179,7 @@ matplotlib-inline==0.2.1
     #   ipython
 mdurl==0.1.2
     # via markdown-it-py
-mistune==3.1.4
+mistune==3.2.1
     # via nbconvert
 nbclient==0.10.2
     # via nbconvert

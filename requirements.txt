@@ -4,7 +4,7 @@
 #
 #    pip-compile
 #
-anyio==4.11.0
+anyio==4.14.2
     # via
     #   httpx
     #   jupyter-server
